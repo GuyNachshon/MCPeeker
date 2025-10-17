@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # NATS JetStream for event streaming
+  nats:
+    image: nats:2.10-alpine
+    container_name: mcpeeker-nats
+    ports:
+      - "4222:4222"  # Client connections
+      - "8222:8222"  # HTTP monitoring
+    command: ["-js", "-m", "8222"]
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ClickHouse for analytics and detections storage
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.10-alpine
+    container_name: mcpeeker-clickhouse
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native protocol
+    environment:
+      CLICKHOUSE_DB: mcpeeker
+      CLICKHOUSE_USER: mcpeeker
+      CLICKHOUSE_PASSWORD: mcpeeker_dev
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/init_tables.sql:/docker-entrypoint-initdb.d/init_tables.sql
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # PostgreSQL for registry and RBAC
+  postgres:
+    image: postgres:16-alpine
+    container_name: mcpeeker-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: mcpeeker_registry
+      POSTGRES_USER: mcpeeker
+      POSTGRES_PASSWORD: mcpeeker_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcpeeker"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Redis for Judge service caching
+  redis:
+    image: redis:7-alpine
+    container_name: mcpeeker-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: mcpeeker-prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: mcpeeker-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../configs/grafana:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  nats-data:
+  clickhouse-data:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  default:
+    name: mcpeeker-network

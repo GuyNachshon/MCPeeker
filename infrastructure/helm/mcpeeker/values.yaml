@@ -1,0 +1,231 @@
+# Default values for MCPeeker
+# Reference: Phase 8 (Production deployment), T121
+
+global:
+  domain: mcpeeker.example.com
+  environment: production
+
+  # NATS Configuration
+  nats:
+    url: nats://nats:4222
+
+  # PostgreSQL Configuration
+  postgres:
+    host: postgres
+    port: 5432
+    database: mcpeeker_registry
+    username: mcpeeker
+    password: CHANGEME_POSTGRES_PASSWORD
+
+  # ClickHouse Configuration
+  clickhouse:
+    host: clickhouse
+    port: 9000
+    database: mcpeeker
+    username: mcpeeker
+    password: CHANGEME_CLICKHOUSE_PASSWORD
+
+  # Redis Configuration
+  redis:
+    url: redis://redis:6379/0
+
+# Scanner Service
+scanner:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: mcpeeker/scanner
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  scanInterval: "300s"
+  logLevel: info
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Correlator Service
+correlator:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: mcpeeker/correlator
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  logLevel: info
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPU: 70
+    targetMemory: 80
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Signature Engine Service
+signatureEngine:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: mcpeeker/signature-engine
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  logLevel: info
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Judge Service
+judge:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: mcpeeker/judge
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  anthropicApiKey: CHANGEME_ANTHROPIC_API_KEY
+  cacheTTL: 3600
+  logLevel: info
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Registry API Service
+registryApi:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: mcpeeker/registry-api
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  jwtSecret: CHANGEME_JWT_SECRET_KEY
+  corsOrigins: "*"
+  logLevel: info
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPU: 70
+    targetMemory: 80
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Frontend Service
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: mcpeeker/frontend
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  apiBaseUrl: http://registry-api:8000
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  class: nginx
+  sslRedirect: true
+  rateLimit: 100
+  tls:
+    enabled: true
+  certManager:
+    enabled: false
+    issuer: letsencrypt-prod
+  annotations: {}
+
+# mTLS Configuration
+mtls:
+  enabled: false
+  certificateRotationDays: 90
+  certManager:
+    enabled: false
+    issuer: mcpeeker-ca-issuer
+
+# RBAC Configuration
+rbac:
+  enabled: true
+
+# NetworkPolicy Configuration
+networkPolicy:
+  enabled: false
+
+# Autoscaling Configuration
+autoscaling:
+  enabled: false
+
+# Persistence Configuration
+persistence:
+  enabled: true
+  storageClass: standard
+  postgres:
+    size: 10Gi
+  clickhouse:
+    size: 50Gi
+  redis:
+    size: 5Gi
+  nats:
+    size: 10Gi

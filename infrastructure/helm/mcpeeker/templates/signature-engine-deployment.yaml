@@ -1,0 +1,117 @@
+{{- if .Values.signatureEngine.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signature-engine
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: signature-engine
+    component: detection
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.signatureEngine.replicaCount }}
+  selector:
+    matchLabels:
+      app: signature-engine
+  template:
+    metadata:
+      labels:
+        app: signature-engine
+        component: detection
+        version: {{ .Chart.AppVersion }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9094"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: signature-engine
+      containers:
+      - name: signature-engine
+        image: "{{ .Values.signatureEngine.image.repository }}:{{ .Values.signatureEngine.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.signatureEngine.image.pullPolicy | default "IfNotPresent" }}
+        ports:
+        - name: metrics
+          containerPort: 9094
+          protocol: TCP
+        env:
+        - name: NATS_URL
+          value: "{{ .Values.global.nats.url }}"
+        - name: RULES_PATH
+          value: "/etc/mcpeeker/rules/community-signatures.yaml"
+        - name: LOG_LEVEL
+          value: "{{ .Values.signatureEngine.logLevel | default "info" }}"
+        volumeMounts:
+        - name: rules
+          mountPath: /etc/mcpeeker/rules
+          readOnly: true
+        {{- if .Values.mtls.enabled }}
+        - name: tls-certs
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.signatureEngine.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 9094
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 9094
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      - name: rules
+        configMap:
+          name: signature-rules
+      {{- if .Values.mtls.enabled }}
+      - name: tls-certs
+        secret:
+          secretName: signature-engine-tls
+      {{- end }}
+      {{- with .Values.signatureEngine.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.signatureEngine.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.signatureEngine.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: signature-engine
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: signature-engine
+    component: detection
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9094
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  selector:
+    app: signature-engine
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: signature-engine
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: signature-engine
+{{- end }}

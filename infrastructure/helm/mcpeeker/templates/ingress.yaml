@@ -1,0 +1,62 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcpeeker-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mcpeeker
+  annotations:
+    {{- if .Values.ingress.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certManager.issuer | default "letsencrypt-prod" }}
+    {{- end }}
+    {{- if eq .Values.ingress.class "nginx" }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "{{ .Values.ingress.sslRedirect | default "true" }}"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "{{ .Values.ingress.sslRedirect | default "true" }}"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rate-limit: "{{ .Values.ingress.rateLimit | default "100" }}"
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.class | default "nginx" }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ .Values.global.domain }}
+    - api.{{ .Values.global.domain }}
+    secretName: mcpeeker-tls
+  {{- end }}
+  rules:
+  # Frontend
+  - host: {{ .Values.global.domain }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  # Registry API
+  - host: api.{{ .Values.global.domain }}
+    http:
+      paths:
+      - path: /api/v1
+        pathType: Prefix
+        backend:
+          service:
+            name: registry-api
+            port:
+              number: 8000
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: registry-api
+            port:
+              number: 8000
+{{- end }}

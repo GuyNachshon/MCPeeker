@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mcpeeker.example.com/schemas/gateway-event.json",
+  "title": "Gateway Classification Event",
+  "description": "Event emitted by LLM Judge service when classifying gateway requests. Published to NATS subject: gateway.classification.judge. Constitution compliance: FR-020 (≤400ms latency), FR-009 (request_excerpt ≤1KB)",
+  "type": "object",
+  "required": [
+    "event_id",
+    "timestamp",
+    "user_id",
+    "score",
+    "classification",
+    "evidence",
+    "judge_available"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this event (UUIDv4)",
+      "examples": ["770e8400-e29b-41d4-a716-446655440002"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Classification time in RFC3339 format",
+      "examples": ["2025-10-16T14:32:10Z"]
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "User making the LLM request (email or identifier). Used for correlation with endpoint events (Developer role scoping).",
+      "examples": ["alice@example.com"]
+    },
+    "model_id": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "LLM model identifier used in the request",
+      "examples": ["gpt-4o"]
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Judge classification score (medium weight in multi-layer correlation). Typical range: 4-7 for confident classifications.",
+      "examples": [5]
+    },
+    "classification": {
+      "type": "object",
+      "required": ["label", "confidence"],
+      "description": "Semantic classification results from Judge model",
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": ["mcp_server", "json_rpc_client", "generic_llm", "unknown"],
+          "description": "Classification label: mcp_server (High confidence MCP server usage), json_rpc_client (Generic JSON-RPC, not necessarily MCP), generic_llm (Standard LLM interaction, no MCP patterns), unknown (Insufficient evidence)",
+          "examples": ["mcp_server"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Model confidence score (0.0-1.0)",
+          "examples": [0.92]
+        },
+        "explanation": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Plain-language reasoning for classification (US5 transparency). Avoid security jargon, explain in developer-friendly terms.",
+          "examples": ["Request contains tool registration and initialization pattern typical of MCP servers"]
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["source", "snippet"],
+      "description": "Detailed evidence from Judge service",
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^judge-v[0-9]+\\.[0-9]+\\.[0-9]+-[a-z0-9-]+$",
+          "description": "Judge service version/model identifier",
+          "examples": ["judge-v0.3.1-distilbert"]
+        },
+        "request_excerpt": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "LLM request excerpt (≤1KB per FR-009 privacy requirement). Sanitized to remove sensitive user data, retains structural patterns.",
+          "examples": ["{\"method\":\"tools/list\",\"params\":{\"category\":\"filesystem\"}}"]
+        },
+        "snippet": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Human-readable evidence summary for UI display",
+          "examples": ["MCP tool listing request detected in LLM gateway traffic"]
+        },
+        "inference_latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Model inference time in milliseconds. Used for monitoring SC-006 (≤400ms p95 latency).",
+          "examples": [280]
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional Judge-specific metadata (extensibility)",
+          "additionalProperties": true,
+          "examples": [{
+            "model_version": "distilbert-base-uncased-finetuned-mcp-v3",
+            "cache_hit": false,
+            "token_count": 128
+          }]
+        }
+      }
+    },
+    "judge_available": {
+      "type": "boolean",
+      "description": "False if Judge service was unavailable at classification time (FR-020b). Correlator will flag detection as 'judge_unavailable' for retrospective scoring.",
+      "examples": [true]
+    },
+    "host_correlation_hint": {
+      "type": "string",
+      "maxLength": 255,
+      "description": "Optional hint for correlating gateway events with endpoint/network events. May contain IP address, hostname, or user endpoint identifier.",
+      "examples": ["10.0.5.100"]
+    }
+  }
+}

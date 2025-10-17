@@ -1,0 +1,148 @@
+{{- if .Values.registryApi.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: registry-api
+    component: api
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.registryApi.replicaCount }}
+  selector:
+    matchLabels:
+      app: registry-api
+  template:
+    metadata:
+      labels:
+        app: registry-api
+        component: api
+        version: {{ .Chart.AppVersion }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: registry-api
+      containers:
+      - name: registry-api
+        image: "{{ .Values.registryApi.image.repository }}:{{ .Values.registryApi.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.registryApi.image.pullPolicy | default "IfNotPresent" }}
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: POSTGRES_HOST
+          value: "{{ .Values.global.postgres.host }}"
+        - name: POSTGRES_PORT
+          value: "{{ .Values.global.postgres.port }}"
+        - name: POSTGRES_DB
+          value: "{{ .Values.global.postgres.database }}"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
+        - name: CLICKHOUSE_HOST
+          value: "{{ .Values.global.clickhouse.host }}"
+        - name: CLICKHOUSE_PORT
+          value: "{{ .Values.global.clickhouse.port }}"
+        - name: CLICKHOUSE_DB
+          value: "{{ .Values.global.clickhouse.database }}"
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-credentials
+              key: username
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-credentials
+              key: password
+        - name: NATS_URL
+          value: "{{ .Values.global.nats.url }}"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
+        - name: LOG_LEVEL
+          value: "{{ .Values.registryApi.logLevel | default "info" }}"
+        - name: CORS_ORIGINS
+          value: "{{ .Values.registryApi.corsOrigins | default "*" }}"
+        volumeMounts:
+        {{- if .Values.mtls.enabled }}
+        - name: tls-certs
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.registryApi.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      {{- if .Values.mtls.enabled }}
+      - name: tls-certs
+        secret:
+          secretName: registry-api-tls
+      {{- end }}
+      {{- with .Values.registryApi.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.registryApi.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.registryApi.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: registry-api
+    component: api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: registry-api
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: registry-api
+{{- end }}

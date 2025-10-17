@@ -1,0 +1,897 @@
+openapi: 3.0.3
+info:
+  title: MCPeeker Registry API
+  version: 1.0.0
+  description: |
+    REST API for managing the authorized MCP registry and user operations.
+
+    **Constitution Compliance**:
+    - FR-006: MCP registration workflow
+    - FR-031-035: RBAC enforcement (Developer, Analyst, Admin roles)
+    - FR-023: Feedback submission for detection accuracy
+
+    **Authentication**: Bearer token (JWT) required for all endpoints.
+    Token payload includes: user_id, email, role (developer|analyst|admin).
+
+    **Authorization**: Role-based access control enforced per endpoint.
+
+  contact:
+    name: MCPeeker Team
+    url: https://github.com/example/mcpeeker
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.mcpeeker.example.com/api/v1
+    description: Production
+  - url: https://staging-api.mcpeeker.example.com/api/v1
+    description: Staging
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+tags:
+  - name: registry
+    description: MCP registry management operations
+  - name: feedback
+    description: Detection feedback and annotations
+  - name: users
+    description: User and RBAC operations
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Registry Endpoints
+  /mcps:
+    post:
+      tags:
+        - registry
+      summary: Register new MCP server
+      description: |
+        Create a new authorized MCP registry entry.
+
+        **RBAC**: Developer, Analyst, Admin
+
+        **User Story**: US1 - Developer self-registration workflow
+
+        Workflow:
+        1. Developer detects unauthorized MCP in UI
+        2. Clicks "Confirm Ownership" → form pre-populated with host/port
+        3. Submits form with purpose and TTL
+        4. MCP record created in registry (approval_status: pending or approved based on org policy)
+
+      operationId: createMCPEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMCPRequest'
+            examples:
+              developer_registration:
+                summary: Developer self-registration
+                value:
+                  host: "10.0.5.100"
+                  port: 3000
+                  manifest_hash: "a3c5f8d9e2b1c4a7f6e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7"
+                  process_signature: "b4d6e8f0a2c4e6f8a0c2e4f6a8c0e2f4a6c8e0f2a4c6e8f0a2c4e6f8a0c2e4f6"
+                  purpose: "Local development MCP server for testing tool integrations"
+                  team: "platform-engineering"
+                  expires_at: "2026-01-16T00:00:00Z"
+
+      responses:
+        '201':
+          description: MCP entry created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: MCP already registered (duplicate composite_id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "conflict"
+                message: "MCP with this composite_id already exists"
+                details:
+                  existing_entry_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    get:
+      tags:
+        - registry
+      summary: List MCP registry entries
+      description: |
+        List authorized MCP entries with filtering and pagination.
+
+        **RBAC**:
+        - Developer: See only entries they own
+        - Analyst: See all entries
+        - Admin: See all entries
+
+        **Filtering**: FR-013 - Filter by approval status, expiration, team
+
+      operationId: listMCPEntries
+      parameters:
+        - name: approval_status
+          in: query
+          description: Filter by approval status
+          schema:
+            type: string
+            enum: [pending, approved, denied, expired]
+          example: approved
+
+        - name: team
+          in: query
+          description: Filter by team name
+          schema:
+            type: string
+          example: platform-engineering
+
+        - name: expiring_within_days
+          in: query
+          description: Filter entries expiring within N days (FR-025)
+          schema:
+            type: integer
+            minimum: 0
+          example: 14
+
+        - name: owner_id
+          in: query
+          description: Filter by owner user ID (Admin only)
+          schema:
+            type: string
+            format: uuid
+
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+
+        - name: page_size
+          in: query
+          description: Number of entries per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+
+      responses:
+        '200':
+          description: List of MCP entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPEntryList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /mcps/{id}:
+    get:
+      tags:
+        - registry
+      summary: Get MCP entry details
+      description: |
+        Retrieve detailed information about a specific MCP registry entry.
+
+        **RBAC**:
+        - Developer: Can view only their own entries
+        - Analyst: Can view all entries
+        - Admin: Can view all entries
+
+      operationId: getMCPEntry
+      parameters:
+        - $ref: '#/components/parameters/MCPEntryID'
+
+      responses:
+        '200':
+          description: MCP entry details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - registry
+      summary: Update MCP entry
+      description: |
+        Update MCP entry fields (purpose, team, expiration).
+
+        **RBAC**:
+        - Developer: Can update only their own entries (purpose, team, expiration)
+        - Admin: Can update all entries including approval_status
+
+        **User Story**: US3 - Platform engineer approves/denies pending registrations
+
+      operationId: updateMCPEntry
+      parameters:
+        - $ref: '#/components/parameters/MCPEntryID'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMCPRequest'
+            examples:
+              admin_approval:
+                summary: Admin approves pending entry
+                value:
+                  approval_status: approved
+              developer_renewal:
+                summary: Developer extends expiration
+                value:
+                  expires_at: "2027-01-16T00:00:00Z"
+                  purpose: "Updated: Production MCP server for customer support tools"
+
+      responses:
+        '200':
+          description: MCP entry updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - registry
+      summary: Delete MCP entry
+      description: |
+        Delete an MCP registry entry (soft delete - marks as deleted, retains in audit log).
+
+        **RBAC**:
+        - Developer: Cannot delete (must request Admin)
+        - Admin: Can delete any entry
+
+      operationId: deleteMCPEntry
+      parameters:
+        - $ref: '#/components/parameters/MCPEntryID'
+
+      responses:
+        '204':
+          description: MCP entry deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /mcps/verify:
+    post:
+      tags:
+        - registry
+      summary: Verify composite identifier against registry
+      description: |
+        Check if a composite_id exists in the authorized registry.
+        Used by correlator service for registry matching (FR-005).
+
+        **RBAC**: Service-to-service (mTLS authenticated), not exposed to users
+
+      operationId: verifyMCPCompositeID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - composite_id
+              properties:
+                composite_id:
+                  type: string
+                  pattern: "^[a-f0-9]{64}$"
+                  description: SHA256 hash of host:port:manifest:proc_sig
+                  example: "e7f9d1c3b5a7e9f1d3c5b7a9e1f3d5c7b9a1e3f5d7c9b1a3e5f7d9c1b3a5e7f9"
+
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - is_registered
+                properties:
+                  is_registered:
+                    type: boolean
+                    description: True if composite_id exists in approved registry entries
+                  registry_entry:
+                    $ref: '#/components/schemas/MCPEntry'
+                    description: Full entry details if registered (null otherwise)
+              examples:
+                registered:
+                  summary: MCP is registered
+                  value:
+                    is_registered: true
+                    registry_entry:
+                      id: "550e8400-e29b-41d4-a716-446655440000"
+                      composite_id: "e7f9d1c3b5a7e9f1d3c5b7a9e1f3d5c7b9a1e3f5d7c9b1a3e5f7d9c1b3a5e7f9"
+                      approval_status: approved
+                unregistered:
+                  summary: MCP not in registry
+                  value:
+                    is_registered: false
+                    registry_entry: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # Feedback Endpoints
+  /feedback:
+    post:
+      tags:
+        - feedback
+      summary: Submit detection feedback
+      description: |
+        Submit analyst feedback on detection accuracy (FR-023).
+
+        **RBAC**: Analyst, Admin
+
+        **User Story**: US2 - SOC analyst marks findings as true/false positive
+
+      operationId: submitFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitFeedbackRequest'
+            examples:
+              true_positive:
+                summary: Analyst confirms unauthorized MCP
+                value:
+                  detection_id: "770e8400-e29b-41d4-a716-446655440002"
+                  verdict: true_positive
+                  notes: "Confirmed with developer Alice - this was an unapproved test server"
+                  tags: ["shadow_it", "unauthorized_testing"]
+
+      responses:
+        '201':
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Detection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # User Endpoints
+  /users/me:
+    get:
+      tags:
+        - users
+      summary: Get current user profile
+      description: |
+        Retrieve authenticated user's profile and notification preferences.
+
+        **RBAC**: All roles
+
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      tags:
+        - users
+      summary: Update current user profile
+      description: |
+        Update user's notification preferences (FR-025a).
+
+        **RBAC**: All roles (users can modify their own preferences)
+
+      operationId: updateCurrentUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+
+      responses:
+        '200':
+          description: User profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users:
+    get:
+      tags:
+        - users
+      summary: List users
+      description: |
+        List all users (Admin only).
+
+        **RBAC**: Admin
+
+      operationId: listUsers
+      parameters:
+        - name: role
+          in: query
+          description: Filter by role
+          schema:
+            type: string
+            enum: [developer, analyst, admin]
+
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - users
+                  - total
+                  - page
+                  - page_size
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  page_size:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+# Components
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token with payload:
+        {
+          "user_id": "uuid",
+          "email": "user@example.com",
+          "role": "developer|analyst|admin",
+          "exp": 1234567890
+        }
+
+  parameters:
+    MCPEntryID:
+      name: id
+      in: path
+      required: true
+      description: MCP registry entry UUID
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+  schemas:
+    # Registry Schemas
+    CreateMCPRequest:
+      type: object
+      required:
+        - host
+        - port
+        - manifest_hash
+        - process_signature
+        - purpose
+        - expires_at
+      properties:
+        host:
+          type: string
+          description: Host IP or hostname
+          maxLength: 255
+          example: "10.0.5.100"
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          example: 3000
+        manifest_hash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA256 hash of manifest file
+          example: "a3c5f8d9e2b1c4a7f6e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7"
+        process_signature:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA256 hash of process command line
+          example: "b4d6e8f0a2c4e6f8a0c2e4f6a8c0e2f4a6c8e0f2a4c6e8f0a2c4e6f8a0c2e4f6"
+        purpose:
+          type: string
+          minLength: 10
+          maxLength: 1024
+          description: Why this MCP exists (FR-006)
+          example: "Local development MCP server for testing tool integrations"
+        team:
+          type: string
+          maxLength: 100
+          description: Team owning this MCP
+          example: "platform-engineering"
+        expires_at:
+          type: string
+          format: date-time
+          description: Expiration timestamp (max 365 days from now)
+          example: "2026-01-16T00:00:00Z"
+
+    UpdateMCPRequest:
+      type: object
+      properties:
+        purpose:
+          type: string
+          minLength: 10
+          maxLength: 1024
+        team:
+          type: string
+          maxLength: 100
+        expires_at:
+          type: string
+          format: date-time
+          description: New expiration (renewal)
+        approval_status:
+          type: string
+          enum: [pending, approved, denied, expired]
+          description: Admin-only field
+
+    MCPEntry:
+      type: object
+      required:
+        - id
+        - composite_id
+        - host
+        - port
+        - owner
+        - purpose
+        - approval_status
+        - created_at
+        - expires_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        composite_id:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA256(host:port:manifest:proc_sig)
+        host:
+          type: string
+        port:
+          type: integer
+        manifest_hash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        process_signature:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        owner:
+          $ref: '#/components/schemas/UserSummary'
+        team:
+          type: string
+        purpose:
+          type: string
+        approval_status:
+          type: string
+          enum: [pending, approved, denied, expired]
+        approved_by:
+          $ref: '#/components/schemas/UserSummary'
+        approved_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        renewed_at:
+          type: string
+          format: date-time
+        expiration_notified_at:
+          type: string
+          format: date-time
+
+    MCPEntryList:
+      type: object
+      required:
+        - entries
+        - total
+        - page
+        - page_size
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPEntry'
+        total:
+          type: integer
+          description: Total number of entries matching filter
+        page:
+          type: integer
+          description: Current page number
+        page_size:
+          type: integer
+          description: Number of entries per page
+
+    # Feedback Schemas
+    SubmitFeedbackRequest:
+      type: object
+      required:
+        - detection_id
+        - verdict
+      properties:
+        detection_id:
+          type: string
+          format: uuid
+          description: ClickHouse detections.detection_id
+        verdict:
+          type: string
+          enum: [true_positive, false_positive, inconclusive]
+          description: Analyst classification
+        notes:
+          type: string
+          maxLength: 4096
+          description: Free-text explanation
+        tags:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+          description: Classification tags
+          example: ["shadow_it", "container_recreation"]
+
+    FeedbackRecord:
+      type: object
+      required:
+        - feedback_id
+        - detection_id
+        - analyst
+        - verdict
+        - submitted_at
+      properties:
+        feedback_id:
+          type: string
+          format: uuid
+        detection_id:
+          type: string
+          format: uuid
+        analyst:
+          $ref: '#/components/schemas/UserSummary'
+        verdict:
+          type: string
+          enum: [true_positive, false_positive, inconclusive]
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        submitted_at:
+          type: string
+          format: date-time
+
+    # User Schemas
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - role
+        - notification_preferences
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [developer, analyst, admin]
+        associated_endpoints:
+          type: array
+          items:
+            type: string
+          description: Host identifiers for Developer role scoping (FR-032)
+        notification_preferences:
+          $ref: '#/components/schemas/NotificationPreferences'
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - email
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [developer, analyst, admin]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        notification_preferences:
+          $ref: '#/components/schemas/NotificationPreferences'
+
+    NotificationPreferences:
+      type: object
+      required:
+        - email_enabled
+        - in_app_enabled
+      properties:
+        email_enabled:
+          type: boolean
+          default: true
+        webhook_enabled:
+          type: boolean
+          default: false
+        in_app_enabled:
+          type: boolean
+          default: true
+        webhook_url:
+          type: string
+          format: uri
+          description: Slack/Teams/PagerDuty webhook (required if webhook_enabled=true)
+          example: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXX"
+        webhook_secret:
+          type: string
+          description: HMAC signature secret for webhook verification
+        notify_on_detection:
+          type: boolean
+          default: true
+        notify_on_expiration:
+          type: boolean
+          default: true
+        notify_on_system_alert:
+          type: boolean
+          default: false
+        detection_score_threshold:
+          type: integer
+          minimum: 0
+          maximum: 20
+          default: 9
+          description: Only notify if detection score >= threshold
+
+    # Error Schemas
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "validation_error"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid request parameters"
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "validation_error"
+            message: "Invalid request parameters"
+            details:
+              field: "expires_at"
+              reason: "Must be future date within 365 days"
+
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "unauthorized"
+            message: "Bearer token required"
+
+    Forbidden:
+      description: Insufficient permissions for this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "forbidden"
+            message: "Admin role required for this operation"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "not_found"
+            message: "MCP entry not found"

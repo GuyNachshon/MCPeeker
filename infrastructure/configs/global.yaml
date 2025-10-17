@@ -1,0 +1,58 @@
+# Global configuration shared across all MCPeeker services
+# Reference: FR-015 (declarative YAML configuration)
+
+global:
+  environment: dev  # dev, staging, prod
+  log_level: info   # debug, info, warn, error
+  version: "0.1.0"
+
+# NATS JetStream common settings
+nats:
+  url: nats://localhost:4222
+  max_reconnects: 10
+  reconnect_wait: 2s
+  timeout: 5s
+  tls_enabled: false
+  # For production with mTLS:
+  # tls_enabled: true
+  # tls_cert_file: /etc/mcpeeker/certs/client.crt
+  # tls_key_file: /etc/mcpeeker/certs/client.key
+  # tls_ca_file: /etc/mcpeeker/certs/ca.crt
+
+# ClickHouse common settings
+clickhouse:
+  host: localhost
+  port: 9000
+  database: mcpeeker
+  username: mcpeeker
+  password: mcpeeker_dev
+  max_open_conns: 20
+  max_idle_conns: 5
+  conn_max_lifetime: 300s
+  tls_enabled: false
+
+# PostgreSQL common settings
+postgresql:
+  host: localhost
+  port: 5432
+  database: mcpeeker_registry
+  username: mcpeeker
+  password: mcpeeker_dev
+  ssl_mode: disable  # disable, require, verify-ca, verify-full
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 300s
+
+# Redis common settings (for Judge caching)
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+  password: ""
+  max_connections: 50
+
+# Observability common settings
+observability:
+  metrics_port: 9090
+  health_check_enabled: true
+  health_check_port: 8080

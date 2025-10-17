@@ -1,0 +1,519 @@
+# NATS JetStream Event Schemas
+# Feature: MCP Detection Platform
+# Phase: 1 (Design - Contracts)
+# Date: 2025-10-16
+
+# This file defines JSON Schema for all NATS event messages.
+# Consumers MUST validate against these schemas before processing.
+
+---
+# Endpoint Event Schema
+# Stream: endpoint.events
+# Subjects: endpoint.detection.file, endpoint.detection.process
+
+endpoint_event_schema:
+  $schema: "http://json-schema.org/draft-07/schema#"
+  $id: "https://mcpeeker.example.com/schemas/endpoint-event.json"
+  title: Endpoint Detection Event
+  description: |
+    Event emitted by endpoint scanner when MCP manifest file or process is detected.
+    Published to NATS subject: endpoint.detection.{file|process}
+    Constitution compliance: FR-009 (snippet ≤1KB), FR-008 (host_id hashed by correlator)
+
+  type: object
+  required:
+    - event_id
+    - timestamp
+    - host_id
+    - detection_type
+    - score
+    - evidence
+
+  properties:
+    event_id:
+      type: string
+      format: uuid
+      description: Unique identifier for this event (UUIDv4)
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    timestamp:
+      type: string
+      format: date-time
+      description: Detection time in RFC3339 format (ISO 8601)
+      example: "2025-10-16T14:32:00Z"
+
+    host_id:
+      type: string
+      description: |
+        Original host identifier (IP, hostname, or container ID).
+        Will be hashed by correlator service before storage per FR-008.
+      minLength: 1
+      maxLength: 255
+      example: "workstation-42.corp.example.com"
+
+    detection_type:
+      type: string
+      enum:
+        - file
+        - process
+      description: Type of endpoint detection mechanism
+
+    score:
+      type: integer
+      minimum: 0
+      maximum: 20
+      description: |
+        Endpoint signal score (highest weight in multi-layer correlation).
+        Typical range: 5-15 for strong MCP indicators.
+      example: 11
+
+    evidence:
+      type: object
+      required:
+        - source
+        - snippet
+      description: Detailed evidence collected by scanner
+
+      properties:
+        source:
+          type: string
+          description: Scanner version/identifier for provenance tracking
+          pattern: "^scanner-v[0-9]+\\.[0-9]+\\.[0-9]+$"
+          example: "scanner-v1.2.3"
+
+        file_path:
+          type: string
+          description: Path to detected manifest file (for file detection type)
+          maxLength: 4096
+          example: "/home/alice/.mcp/manifest.json"
+
+        file_hash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA256 hash of manifest file content
+          example: "a3c5f8d9e2b1c4a7f6e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7"
+
+        process_command:
+          type: string
+          description: Process command line (for process detection type)
+          maxLength: 4096
+          example: "node /usr/local/bin/mcp-server --port 3000"
+
+        process_hash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA256 hash of process signature (command + binary path)
+          example: "b4d6e8f0a2c4e6f8a0c2e4f6a8c0e2f4a6c8e0f2a4c6e8f0a2c4e6f8a0c2e4f6"
+
+        snippet:
+          type: string
+          maxLength: 1024
+          description: |
+            File/process excerpt (≤1KB per FR-009 privacy requirement).
+            For files: first 1KB of manifest JSON.
+            For processes: command line + environment variables excerpt.
+          example: '{"name":"my-mcp-server","version":"1.0.0","protocol":"mcp/1.0"}'
+
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          description: |
+            Detected TCP port from manifest or process arguments.
+            Used for composite identifier construction.
+          example: 3000
+
+        metadata:
+          type: object
+          description: Additional scanner-specific metadata (extensibility)
+          additionalProperties: true
+          example:
+            scan_duration_ms: 42
+            file_size_bytes: 512
+            process_pid: 12345
+
+---
+# Network Event Schema
+# Stream: network.events
+# Subjects: network.detection.zeek, network.detection.suricata
+
+network_event_schema:
+  $schema: "http://json-schema.org/draft-07/schema#"
+  $id: "https://mcpeeker.example.com/schemas/network-event.json"
+  title: Network Detection Event
+  description: |
+    Event emitted by network IDS (Zeek/Suricata) when MCP protocol signatures detected.
+    Published to NATS subject: network.detection.{zeek|suricata}
+    Constitution compliance: FR-009 (payload_excerpt ≤1KB)
+
+  type: object
+  required:
+    - event_id
+    - timestamp
+    - source_ip
+    - dest_ip
+    - dest_port
+    - protocol
+    - score
+    - evidence
+
+  properties:
+    event_id:
+      type: string
+      format: uuid
+      description: Unique identifier for this event (UUIDv4)
+      example: "660e8400-e29b-41d4-a716-446655440001"
+
+    timestamp:
+      type: string
+      format: date-time
+      description: Detection time in RFC3339 format
+      example: "2025-10-16T14:32:05Z"
+
+    source_ip:
+      type: string
+      oneOf:
+        - format: ipv4
+        - format: ipv6
+      description: Source IP address (client initiating connection)
+      example: "192.168.1.42"
+
+    dest_ip:
+      type: string
+      oneOf:
+        - format: ipv4
+        - format: ipv6
+      description: |
+        Destination IP address (target host, used for correlation with endpoint events).
+        This is the host running the suspected MCP server.
+      example: "10.0.5.100"
+
+    dest_port:
+      type: integer
+      minimum: 1
+      maximum: 65535
+      description: Destination TCP/UDP port
+      example: 3000
+
+    protocol:
+      type: string
+      enum:
+        - tcp
+        - udp
+      description: Transport protocol
+      example: "tcp"
+
+    score:
+      type: integer
+      minimum: 0
+      maximum: 10
+      description: |
+        Network signal score (supporting weight in multi-layer correlation).
+        Typical range: 2-5 for weak signatures, 6-10 for strong signatures.
+      example: 3
+
+    evidence:
+      type: object
+      required:
+        - sensor_id
+        - signature_id
+        - snippet
+      description: Detailed evidence collected by network IDS
+
+      properties:
+        sensor_id:
+          type: string
+          description: Zeek/Suricata sensor identifier for provenance tracking
+          pattern: "^(zeek|suricata)-sensor-[a-z0-9-]+$"
+          example: "zeek-sensor-3"
+
+        signature_id:
+          type: string
+          description: |
+            Knostik signature ID that matched (community-maintained rules).
+            Format: knostik:{category}:{pattern}:{version}
+          pattern: "^knostik:[a-z]+:[a-z0-9-]+:v[0-9]+$"
+          example: "knostik:mcp:jsonrpc-handshake:v1"
+
+        payload_excerpt:
+          type: string
+          maxLength: 1024
+          description: |
+            Network payload snippet (≤1KB per FR-009).
+            Base64-encoded if binary, plain text if JSON/ASCII.
+          example: '{"jsonrpc":"2.0","method":"initialize","params":{}}'
+
+        snippet:
+          type: string
+          maxLength: 1024
+          description: |
+            Human-readable description of what was detected.
+            Displayed in UI for analyst review (US2).
+          example: "JSON-RPC 2.0 initialization handshake detected on port 3000"
+
+        packet_count:
+          type: integer
+          minimum: 1
+          description: Number of packets in the analyzed flow
+          example: 12
+
+        flow_duration_ms:
+          type: integer
+          minimum: 0
+          description: Duration of network flow in milliseconds
+          example: 450
+
+        metadata:
+          type: object
+          description: Additional IDS-specific metadata (extensibility)
+          additionalProperties: true
+          example:
+            zeek_conn_id: "ClEkJM2Vm5giqnMf9"
+            suricata_alert_id: 1234567
+
+---
+# Gateway Event Schema
+# Stream: gateway.events
+# Subject: gateway.classification.judge
+
+gateway_event_schema:
+  $schema: "http://json-schema.org/draft-07/schema#"
+  $id: "https://mcpeeker.example.com/schemas/gateway-event.json"
+  title: Gateway Classification Event
+  description: |
+    Event emitted by LLM Judge service when classifying gateway requests.
+    Published to NATS subject: gateway.classification.judge
+    Constitution compliance: FR-020 (≤400ms latency), FR-009 (request_excerpt ≤1KB)
+
+  type: object
+  required:
+    - event_id
+    - timestamp
+    - user_id
+    - score
+    - classification
+    - evidence
+    - judge_available
+
+  properties:
+    event_id:
+      type: string
+      format: uuid
+      description: Unique identifier for this event (UUIDv4)
+      example: "770e8400-e29b-41d4-a716-446655440002"
+
+    timestamp:
+      type: string
+      format: date-time
+      description: Classification time in RFC3339 format
+      example: "2025-10-16T14:32:10Z"
+
+    user_id:
+      type: string
+      description: |
+        User making the LLM request (email or identifier).
+        Used for correlation with endpoint events (Developer role scoping).
+      minLength: 1
+      maxLength: 255
+      example: "alice@example.com"
+
+    model_id:
+      type: string
+      description: LLM model identifier used in the request
+      maxLength: 100
+      example: "gpt-4o"
+
+    score:
+      type: integer
+      minimum: 0
+      maximum: 10
+      description: |
+        Judge classification score (medium weight in multi-layer correlation).
+        Typical range: 4-7 for confident classifications.
+      example: 5
+
+    classification:
+      type: object
+      required:
+        - label
+        - confidence
+      description: Semantic classification results from Judge model
+
+      properties:
+        label:
+          type: string
+          enum:
+            - mcp_server
+            - json_rpc_client
+            - generic_llm
+            - unknown
+          description: |
+            Classification label:
+            - mcp_server: High confidence MCP server usage
+            - json_rpc_client: Generic JSON-RPC (not necessarily MCP)
+            - generic_llm: Standard LLM interaction (no MCP patterns)
+            - unknown: Insufficient evidence
+          example: "mcp_server"
+
+        confidence:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Model confidence score (0.0-1.0)
+          example: 0.92
+
+        explanation:
+          type: string
+          maxLength: 512
+          description: |
+            Plain-language reasoning for classification (US5 transparency).
+            Avoid security jargon, explain in developer-friendly terms.
+          example: "Request contains tool registration and initialization pattern typical of MCP servers"
+
+    evidence:
+      type: object
+      required:
+        - source
+        - snippet
+      description: Detailed evidence from Judge service
+
+      properties:
+        source:
+          type: string
+          description: Judge service version/model identifier
+          pattern: "^judge-v[0-9]+\\.[0-9]+\\.[0-9]+-[a-z0-9-]+$"
+          example: "judge-v0.3.1-distilbert"
+
+        request_excerpt:
+          type: string
+          maxLength: 1024
+          description: |
+            LLM request excerpt (≤1KB per FR-009 privacy requirement).
+            Sanitized to remove sensitive user data, retains structural patterns.
+          example: '{"method":"tools/list","params":{"category":"filesystem"}}'
+
+        snippet:
+          type: string
+          maxLength: 1024
+          description: Human-readable evidence summary for UI display
+          example: "MCP tool listing request detected in LLM gateway traffic"
+
+        inference_latency_ms:
+          type: integer
+          minimum: 0
+          description: |
+            Model inference time in milliseconds.
+            Used for monitoring SC-006 (≤400ms p95 latency).
+          example: 280
+
+        metadata:
+          type: object
+          description: Additional Judge-specific metadata (extensibility)
+          additionalProperties: true
+          example:
+            model_version: "distilbert-base-uncased-finetuned-mcp-v3"
+            cache_hit: false
+            token_count: 128
+
+    judge_available:
+      type: boolean
+      description: |
+        False if Judge service was unavailable at classification time (FR-020b).
+        Correlator will flag detection as "judge_unavailable" for retrospective scoring.
+      example: true
+
+    host_correlation_hint:
+      type: string
+      description: |
+        Optional hint for correlating gateway events with endpoint/network events.
+        May contain IP address, hostname, or user endpoint identifier.
+      maxLength: 255
+      example: "10.0.5.100"
+
+---
+# Stream Configuration
+# Applied via NATS CLI or Helm chart values
+
+stream_configurations:
+  endpoint_stream:
+    name: endpoint.events
+    subjects:
+      - "endpoint.detection.file"
+      - "endpoint.detection.process"
+    retention: limits
+    max_age: 604800s  # 7 days (FR-020c: Judge service recovery window)
+    max_msgs: 100000000  # 100M messages (aligns with FR-027 scale)
+    max_bytes: 107374182400  # 100GB
+    storage: file
+    replicas: 3  # High availability across NATS cluster nodes
+    discard: old  # Discard oldest messages when limits reached
+    duplicate_window: 300s  # 5 minutes (FR-002a deduplication)
+
+  network_stream:
+    name: network.events
+    subjects:
+      - "network.detection.zeek"
+      - "network.detection.suricata"
+    retention: limits
+    max_age: 604800s
+    max_msgs: 100000000
+    max_bytes: 107374182400
+    storage: file
+    replicas: 3
+    discard: old
+    duplicate_window: 300s
+
+  gateway_stream:
+    name: gateway.events
+    subjects:
+      - "gateway.classification.judge"
+    retention: limits
+    max_age: 604800s
+    max_msgs: 50000000  # Lower volume expected (not every endpoint generates gateway traffic)
+    max_bytes: 53687091200  # 50GB
+    storage: file
+    replicas: 3
+    discard: old
+    duplicate_window: 300s
+
+---
+# Consumer Configuration Examples
+# Push-based for real-time correlator, pull-based for batch analytics
+
+consumer_examples:
+  correlator_consumer:
+    stream: endpoint.events
+    durable_name: correlator-endpoint-consumer
+    deliver_policy: all  # Process all messages from stream start
+    ack_policy: explicit  # Manual acknowledgment after ClickHouse write
+    ack_wait: 30s  # Allow 30s for ClickHouse write + retry
+    max_deliver: 3  # Retry up to 3 times before DLQ
+    filter_subject: "endpoint.detection.*"  # Subscribe to all endpoint subjects
+
+  analytics_consumer:
+    stream: gateway.events
+    durable_name: analytics-batch-consumer
+    deliver_policy: by_start_time  # Batch processing from specific timestamp
+    ack_policy: explicit
+    ack_wait: 60s  # Longer timeout for batch operations
+    max_deliver: 5
+    filter_subject: "gateway.classification.*"
+
+---
+# Validation Rules Summary
+# Enforced by producers before publishing to NATS
+
+validation_rules:
+  - All events MUST have valid UUIDv4 event_id
+  - All timestamps MUST be RFC3339 format with timezone
+  - All snippet/payload fields MUST NOT exceed 1024 bytes (FR-009)
+  - All hash fields MUST be exactly 64 hex characters (SHA256)
+  - Port numbers MUST be in valid range 1-65535
+  - Scores MUST be in documented ranges (endpoint: 0-20, network: 0-10, gateway: 0-10)
+  - JSON Schema validation MUST pass before NATS publish (contract compliance)
+
+# Observability
+# All producers MUST export Prometheus metrics:
+# - event_published_total{stream, subject} (counter)
+# - event_validation_failed_total{stream, reason} (counter)
+# - event_publish_latency_seconds{stream} (histogram)

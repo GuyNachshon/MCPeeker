@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scanner-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: scanner
+data:
+  scanner.yaml: |
+    nats:
+      url: {{ .Values.global.nats.url }}
+      stream: mcpeeker-events
+      subject: endpoint.events
+    scan_interval: {{ .Values.scanner.scanInterval | default "300s" }}
+    file_scanner:
+      enabled: true
+      paths:
+        - "/usr/local/lib"
+        - "/opt"
+        - "~/.local"
+      patterns:
+        - "**/manifest.json"
+        - "**/*mcp*.json"
+    process_scanner:
+      enabled: true
+      port_ranges:
+        - start: 3000
+          end: 3100
+    metrics:
+      enabled: true
+      port: 9091
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: correlator-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: correlator
+data:
+  correlator.yaml: |
+    nats:
+      url: {{ .Values.global.nats.url }}
+      consumer_group: correlator-workers
+      subjects:
+        - enriched.endpoint
+        - enriched.network
+        - enriched.gateway
+    clickhouse:
+      host: {{ .Values.global.clickhouse.host }}
+      port: {{ .Values.global.clickhouse.port }}
+      database: {{ .Values.global.clickhouse.database }}
+    postgres:
+      host: {{ .Values.global.postgres.host }}
+      port: {{ .Values.global.postgres.port }}
+      database: {{ .Values.global.postgres.database }}
+    scoring:
+      weights:
+        endpoint: 11
+        judge: 5
+        network: 3
+        registry: -6
+      thresholds:
+        authorized_max: 4
+        suspect_min: 5
+        suspect_max: 8
+        unauthorized_min: 9
+    deduplication:
+      window: 300  # 5 minutes
+    metrics:
+      enabled: true
+      port: 9092
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signature-rules
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: signature-engine
+data:
+  community-signatures.yaml: |
+{{ .Files.Get "configs/community-signatures.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-signatures
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: signature-engine
+data:
+  zeek_suricata.yaml: |
+{{ .Files.Get "configs/zeek_suricata.yaml" | indent 4 }}

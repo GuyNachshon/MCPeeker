@@ -1,0 +1,51 @@
+# Prometheus configuration for MCPeeker
+# Reference: FR-014 (Metrics), Phase 2 (Observability)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'mcpeeker-local'
+    environment: 'development'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scanner service
+  - job_name: 'scanner'
+    static_configs:
+      - targets: ['host.docker.internal:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Correlator service
+  - job_name: 'correlator'
+    static_configs:
+      - targets: ['host.docker.internal:9092']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Judge service
+  - job_name: 'judge'
+    static_configs:
+      - targets: ['host.docker.internal:9093']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Registry API service
+  - job_name: 'registry-api'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # NATS monitoring
+  - job_name: 'nats'
+    static_configs:
+      - targets: ['nats:8222']
+    metrics_path: '/metrics'
+    scrape_interval: 10s

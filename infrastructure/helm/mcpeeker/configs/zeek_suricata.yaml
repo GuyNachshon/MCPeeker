@@ -1,0 +1,271 @@
+# Network monitoring signatures for MCP detection
+# Reference: US4 (Multi-layer correlation), T065-T066
+
+# Zeek signatures for MCP JSON-RPC patterns
+zeek_signatures:
+  - id: "mcp-jsonrpc-handshake"
+    name: "MCP JSON-RPC Handshake Detection"
+    description: "Detects MCP server JSON-RPC initialization handshake"
+    protocol: tcp
+    ports: [3000-3100]
+    patterns:
+      - content: '"jsonrpc":"2.0"'
+      - content: '"method":"initialize"'
+      - content: '"protocolVersion"'
+    severity: low
+    action: alert
+
+  - id: "mcp-tools-list"
+    name: "MCP Tools List Request"
+    description: "Detects tools/list JSON-RPC calls typical of MCP"
+    protocol: tcp
+    ports: [3000-3100]
+    patterns:
+      - content: '"method":"tools/list"'
+      - content: '"jsonrpc"'
+    severity: low
+    action: alert
+
+  - id: "mcp-resources-list"
+    name: "MCP Resources List Request"
+    description: "Detects resources/list JSON-RPC calls"
+    protocol: tcp
+    ports: [3000-3100]
+    patterns:
+      - content: '"method":"resources/list"'
+      - content: '"jsonrpc"'
+    severity: low
+    action: alert
+
+  - id: "mcp-prompts-list"
+    name: "MCP Prompts List Request"
+    description: "Detects prompts/list JSON-RPC calls"
+    protocol: tcp
+    ports: [3000-3100]
+    patterns:
+      - content: '"method":"prompts/list"'
+      - content: '"jsonrpc"'
+    severity: low
+    action: alert
+
+  - id: "mcp-sampling-message"
+    name: "MCP Sampling Message Request"
+    description: "Detects sampling/createMessage calls (LLM interaction)"
+    protocol: tcp
+    ports: [3000-3100]
+    patterns:
+      - content: '"method":"sampling/createMessage"'
+      - content: '"messages"'
+    severity: medium
+    action: alert
+
+# Suricata rules for MCP traffic
+suricata_rules:
+  - id: 1000001
+    name: "MCP JSON-RPC Initialization"
+    action: alert
+    protocol: tcp
+    source:
+      ip: any
+      port: any
+    destination:
+      ip: any
+      port: "[3000:3100]"
+    content:
+      - '"jsonrpc":"2.0"'
+      - '"method":"initialize"'
+    message: "MCP Server JSON-RPC Initialization Detected"
+    metadata:
+      - "mcp_protocol"
+      - "initialization"
+    classtype: "protocol-command-decode"
+    sid: 1000001
+    rev: 1
+
+  - id: 1000002
+    name: "MCP Tools Registration"
+    action: alert
+    protocol: tcp
+    source:
+      ip: any
+      port: any
+    destination:
+      ip: any
+      port: "[3000:3100]"
+    content:
+      - '"method":"tools/list"'
+      - '"jsonrpc"'
+    message: "MCP Tools List Request Detected"
+    metadata:
+      - "mcp_protocol"
+      - "tools_registration"
+    classtype: "protocol-command-decode"
+    sid: 1000002
+    rev: 1
+
+  - id: 1000003
+    name: "MCP Resource Access"
+    action: alert
+    protocol: tcp
+    source:
+      ip: any
+      port: any
+    destination:
+      ip: any
+      port: "[3000:3100]"
+    content:
+      - '"method":"resources/read"'
+      - '"uri"'
+    message: "MCP Resource Read Request Detected"
+    metadata:
+      - "mcp_protocol"
+      - "resource_access"
+    classtype: "protocol-command-decode"
+    sid: 1000003
+    rev: 1
+
+  - id: 1000004
+    name: "MCP Sampling Request (High Severity)"
+    action: alert
+    protocol: tcp
+    source:
+      ip: any
+      port: any
+    destination:
+      ip: any
+      port: "[3000:3100]"
+    content:
+      - '"method":"sampling/createMessage"'
+      - '"model"'
+      - '"messages"'
+    message: "MCP LLM Sampling Request Detected (High Severity)"
+    metadata:
+      - "mcp_protocol"
+      - "llm_interaction"
+      - "high_severity"
+    classtype: "attempted-user"
+    sid: 1000004
+    rev: 1
+    priority: 1
+
+  - id: 1000005
+    name: "MCP Prompt Execution"
+    action: alert
+    protocol: tcp
+    source:
+      ip: any
+      port: any
+    destination:
+      ip: any
+      port: "[3000:3100]"
+    content:
+      - '"method":"prompts/get"'
+      - '"arguments"'
+    message: "MCP Prompt Execution Detected"
+    metadata:
+      - "mcp_protocol"
+      - "prompt_execution"
+    classtype: "protocol-command-decode"
+    sid: 1000005
+    rev: 1
+
+# Zeek script configuration
+zeek_scripts:
+  # Custom Zeek script to detect MCP traffic
+  mcp_detection:
+    enabled: true
+    script_path: "/opt/zeek/share/zeek/site/mcp-detection.zeek"
+    description: "MCP traffic analysis and logging"
+
+  # Zeek logging configuration
+  logging:
+    format: json
+    output_path: "/var/log/zeek/mcp/"
+    rotation_interval: 3600  # 1 hour
+    fields:
+      - ts
+      - uid
+      - id.orig_h
+      - id.orig_p
+      - id.resp_h
+      - id.resp_p
+      - proto
+      - service
+      - duration
+      - orig_bytes
+      - resp_bytes
+      - conn_state
+      - http_method
+      - http_uri
+      - http_user_agent
+
+# Suricata configuration
+suricata_config:
+  # AF_PACKET configuration for high-performance capture
+  af_packet:
+    - interface: eth0
+      cluster_id: 99
+      cluster_type: cluster_flow
+      defrag: yes
+      threads: 4
+
+  # Home networks (customize per deployment)
+  home_net: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
+  external_net: "!$HOME_NET"
+
+  # Outputs
+  outputs:
+    - eve-log:
+        enabled: yes
+        filetype: regular
+        filename: /var/log/suricata/eve.json
+        types:
+          - alert:
+              payload: yes
+              payload_buffer_size: 4kb
+              payload_printable: yes
+          - http:
+              extended: yes
+          - dns
+          - tls
+          - flow
+
+  # Rule files
+  rule_files:
+    - /etc/suricata/rules/mcp.rules
+    - /etc/suricata/rules/emerging-threats.rules
+
+# NATS integration
+nats_integration:
+  enabled: true
+  nats_url: "nats://localhost:4222"
+  publish_subject: "network.events"
+
+  # Zeek to NATS adapter
+  zeek_adapter:
+    script_path: "/opt/scripts/zeek-to-nats.py"
+    log_file: "/var/log/zeek/mcp/conn.json"
+    poll_interval_seconds: 5
+
+  # Suricata to NATS adapter
+  suricata_adapter:
+    script_path: "/opt/scripts/suricata-to-nats.py"
+    log_file: "/var/log/suricata/eve.json"
+    poll_interval_seconds: 5
+
+# Performance tuning
+performance:
+  # Packet capture
+  snaplen: 1518  # Full packet capture
+  buffer_size: 128mb
+
+  # Processing
+  max_pending_packets: 65535
+  detection_profile: high
+
+  # Thresholds to reduce noise
+  suppress:
+    # Suppress repeated alerts from same source
+    - track: by_src
+      count: 5
+      seconds: 300

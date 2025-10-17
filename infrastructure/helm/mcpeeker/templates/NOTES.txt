@@ -1,0 +1,78 @@
+MCPeeker has been installed successfully!
+
+Chart Version: {{ .Chart.Version }}
+App Version: {{ .Chart.AppVersion }}
+Release Name: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Services deployed:
+{{- if .Values.scanner.enabled }}
+  - Scanner ({{ .Values.scanner.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.correlator.enabled }}
+  - Correlator ({{ .Values.correlator.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.signatureEngine.enabled }}
+  - Signature Engine ({{ .Values.signatureEngine.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.judge.enabled }}
+  - Judge ({{ .Values.judge.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.registryApi.enabled }}
+  - Registry API ({{ .Values.registryApi.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.frontend.enabled }}
+  - Frontend ({{ .Values.frontend.replicaCount }} replicas)
+{{- end }}
+
+{{ if .Values.ingress.enabled }}
+Access the application at:
+  - Frontend: https://{{ .Values.global.domain }}
+  - API: https://api.{{ .Values.global.domain }}/api/v1
+{{ else }}
+To access the application, you need to port-forward:
+
+  # Frontend
+  kubectl port-forward -n {{ .Release.Namespace }} svc/frontend 3000:80
+
+  # Registry API
+  kubectl port-forward -n {{ .Release.Namespace }} svc/registry-api 8000:8000
+
+Then access:
+  - Frontend: http://localhost:3000
+  - API: http://localhost:8000/api/v1
+{{ end }}
+
+Health Checks:
+  kubectl get pods -n {{ .Release.Namespace }}
+  kubectl logs -n {{ .Release.Namespace }} -l app=registry-api --tail=50
+
+Monitoring:
+  - Prometheus metrics available at /metrics endpoints on all services
+  - Configure Prometheus to scrape the metrics endpoints
+
+Next Steps:
+1. Update secrets with your actual credentials:
+   kubectl edit secret -n {{ .Release.Namespace }} postgres-credentials
+   kubectl edit secret -n {{ .Release.Namespace }} clickhouse-credentials
+   kubectl edit secret -n {{ .Release.Namespace }} anthropic-credentials
+   kubectl edit secret -n {{ .Release.Namespace }} jwt-secret
+
+2. Initialize the database:
+   kubectl exec -n {{ .Release.Namespace }} -it deployment/registry-api -- alembic upgrade head
+
+3. Configure your endpoints to use the scanner agent
+
+{{- if .Values.mtls.enabled }}
+4. mTLS is enabled - ensure cert-manager is installed and configured
+{{- end }}
+
+{{- if .Values.autoscaling.enabled }}
+5. Autoscaling is enabled - ensure metrics-server is installed
+{{- end }}
+
+For more information:
+  - Documentation: https://github.com/ozlabs/mcpeeker
+  - Issues: https://github.com/ozlabs/mcpeeker/issues
+
+Thank you for using MCPeeker! 🔍

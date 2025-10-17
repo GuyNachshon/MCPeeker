@@ -205,3 +205,54 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.dylib
+*.test
+*.out
+go.work
+vendor/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# TypeScript
+*.tsbuildinfo
+
+# Docker
+.dockerignore
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+
+# MCPeeker specific
+infrastructure/docker/volumes/
+infrastructure/configs/*.local.yaml
+backend/*/bin/
+backend/*/tmp/
+*.pem
+*.key
+*.crt
+*.csr
+
+# OS specific
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.bak

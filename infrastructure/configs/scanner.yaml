@@ -1,0 +1,32 @@
+# Scanner service configuration
+# Reference: FR-017 (12-hour scan cycle), FR-018 (filesystem roots)
+
+scanner:
+  # Filesystem roots to scan for MCP manifests
+  filesystem_roots:
+    - /home
+    - /Users
+    - /workspace
+    - /opt
+
+  # Scan interval (FR-017: default 12 hours)
+  scan_interval: 12h
+
+  # Maximum concurrent file scans
+  max_concurrent_scans: 10
+
+  # File size limit (skip files larger than this)
+  max_file_size_bytes: 10485760  # 10MB
+
+  # Enable process scanning
+  process_scan_enabled: true
+
+  # Manifest file patterns to search for
+  manifest_patterns:
+    - "**/manifest.json"
+    - "**/.mcp/manifest.json"
+    - "**/mcp-manifest.json"
+
+# NATS-specific settings for scanner
+nats:
+  subject: endpoint.detection.file

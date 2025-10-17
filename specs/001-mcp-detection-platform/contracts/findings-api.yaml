@@ -1,0 +1,845 @@
+openapi: 3.0.3
+info:
+  title: MCPeeker Findings API
+  version: 1.0.0
+  description: |
+    REST API for querying detection findings and analytics.
+
+    **Constitution Compliance**:
+    - FR-013: Filter detections by score threshold, registry status, time range
+    - FR-031-035: RBAC enforcement (Developer sees own endpoints, Analyst/Admin see all)
+    - FR-007: Display all evidence for investigation (US2)
+
+    **Authentication**: Bearer token (JWT) required for all endpoints.
+
+    **Data Source**: ClickHouse `detections` table (read-only queries, analytics optimized)
+
+  contact:
+    name: MCPeeker Team
+    url: https://github.com/example/mcpeeker
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.mcpeeker.example.com/api/v1
+    description: Production
+  - url: https://staging-api.mcpeeker.example.com/api/v1
+    description: Staging
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+tags:
+  - name: findings
+    description: Detection findings and investigation
+  - name: analytics
+    description: Aggregated metrics and dashboard data
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Findings Endpoints
+  /findings:
+    get:
+      tags:
+        - findings
+      summary: List detection findings
+      description: |
+        Query detection findings with filtering and pagination.
+
+        **RBAC**:
+        - Developer: See only detections from their associated endpoints (FR-032)
+        - Analyst: See all detections (FR-033)
+        - Admin: See all detections (FR-034)
+
+        **Filtering**: FR-013 - Score threshold, registry status, time range
+
+        **User Story**: US2 - SOC analyst filters for high-risk unregistered detections
+
+      operationId: listFindings
+      parameters:
+        - name: score_min
+          in: query
+          description: Minimum score threshold (inclusive)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 20
+          example: 9
+
+        - name: score_max
+          in: query
+          description: Maximum score threshold (inclusive)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 20
+
+        - name: classification
+          in: query
+          description: Filter by classification
+          schema:
+            type: string
+            enum: [authorized, suspect, unauthorized]
+          example: unauthorized
+
+        - name: registry_matched
+          in: query
+          description: Filter by registry match status
+          schema:
+            type: boolean
+          example: false
+
+        - name: judge_available
+          in: query
+          description: Filter by Judge service availability (FR-020b)
+          schema:
+            type: boolean
+
+        - name: time_start
+          in: query
+          description: Start of time range (RFC3339)
+          schema:
+            type: string
+            format: date-time
+          example: "2025-10-01T00:00:00Z"
+
+        - name: time_end
+          in: query
+          description: End of time range (RFC3339)
+          schema:
+            type: string
+            format: date-time
+          example: "2025-10-16T23:59:59Z"
+
+        - name: host_id_hash
+          in: query
+          description: Filter by hashed host ID (for per-host investigation)
+          schema:
+            type: string
+            pattern: "^[a-f0-9]{64}$"
+
+        - name: evidence_type
+          in: query
+          description: Filter detections containing specific evidence type
+          schema:
+            type: string
+            enum: [endpoint, network, gateway]
+
+        - name: sort_by
+          in: query
+          description: Sort field
+          schema:
+            type: string
+            enum: [timestamp, score]
+            default: timestamp
+
+        - name: sort_order
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+
+        - name: page_size
+          in: query
+          description: Number of findings per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+
+      responses:
+        '200':
+          description: List of detection findings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingsList'
+              examples:
+                high_risk_unauthorized:
+                  summary: High-risk unauthorized detections
+                  value:
+                    findings:
+                      - detection_id: "770e8400-e29b-41d4-a716-446655440002"
+                        timestamp: "2025-10-16T14:32:10Z"
+                        host_id_hash: "e7f9d1c3b5a7e9f1d3c5b7a9e1f3d5c7b9a1e3f5d7c9b1a3e5f7d9c1b3a5e7f9"
+                        host: "10.0.5.100"
+                        port: 3000
+                        score: 17
+                        classification: "unauthorized"
+                        registry_matched: false
+                        evidence_count: 3
+                        judge_available: true
+                    total: 42
+                    page: 1
+                    page_size: 20
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /findings/{id}:
+    get:
+      tags:
+        - findings
+      summary: Get finding details
+      description: |
+        Retrieve detailed information about a specific detection finding including all evidence.
+
+        **RBAC**:
+        - Developer: Can view only findings from their associated endpoints
+        - Analyst: Can view all findings
+        - Admin: Can view all findings
+
+        **User Story**: US2 - Analyst opens investigation panel to view all evidence
+
+      operationId: getFinding
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+
+      responses:
+        '200':
+          description: Finding details with full evidence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingDetail'
+              examples:
+                multi_layer_detection:
+                  summary: Detection with endpoint + network + gateway evidence
+                  value:
+                    detection_id: "770e8400-e29b-41d4-a716-446655440002"
+                    timestamp: "2025-10-16T14:32:10Z"
+                    host_id_hash: "e7f9d1c3b5a7e9f1d3c5b7a9e1f3d5c7b9a1e3f5d7c9b1a3e5f7d9c1b3a5e7f9"
+                    composite_id: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+                    host: "10.0.5.100"
+                    port: 3000
+                    score: 17
+                    classification: "unauthorized"
+                    registry_matched: false
+                    registry_id: null
+                    evidence:
+                      - type: "endpoint"
+                        source: "scanner-v1.2.3"
+                        score_contribution: 11
+                        detected_at: "2025-10-16T14:32:00Z"
+                        snippet: '{"name":"my-mcp-server","version":"1.0.0"}'
+                        metadata:
+                          file_path: "/home/alice/.mcp/manifest.json"
+                          file_hash: "a3c5f8d9e2b1c4a7f6e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7"
+                      - type: "network"
+                        source: "zeek-sensor-3"
+                        score_contribution: 3
+                        detected_at: "2025-10-16T14:32:05Z"
+                        snippet: "JSON-RPC 2.0 initialization handshake detected"
+                        metadata:
+                          signature_id: "knostik:mcp:jsonrpc-handshake:v1"
+                          packet_count: 12
+                      - type: "gateway"
+                        source: "judge-v0.3.1-distilbert"
+                        score_contribution: 5
+                        detected_at: "2025-10-16T14:32:10Z"
+                        snippet: "MCP tool listing request detected"
+                        metadata:
+                          classification: "mcp_server"
+                          confidence: 0.92
+                          explanation: "Request contains tool registration and initialization pattern"
+                    judge_available: true
+                    judge_classification: "mcp_server"
+                    judge_confidence: 0.92
+                    judge_explanation: "Request contains tool registration and initialization pattern typical of MCP servers"
+                    dedup_window_start: "2025-10-16T14:30:00Z"
+                    dedup_window_end: "2025-10-16T14:35:00Z"
+                    merged_detection_ids: []
+                    created_at: "2025-10-16T14:32:10Z"
+                    updated_at: "2025-10-16T14:32:10Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - findings
+      summary: Update finding status
+      description: |
+        Update finding metadata (e.g., mark for follow-up, add notes).
+
+        **RBAC**: Analyst, Admin
+
+        **Note**: Feedback submission uses separate /api/v1/feedback endpoint.
+        This endpoint is for operational metadata only.
+
+      operationId: updateFinding
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFindingRequest'
+
+      responses:
+        '200':
+          description: Finding updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Analytics Endpoints
+  /analytics/score-distribution:
+    get:
+      tags:
+        - analytics
+      summary: Get score distribution histogram
+      description: |
+        Retrieve score distribution for dashboard visualization.
+
+        **RBAC**: Analyst, Admin
+
+        **User Story**: US1 - Dashboard shows score distribution
+
+      operationId: getScoreDistribution
+      parameters:
+        - name: time_start
+          in: query
+          description: Start of time range
+          schema:
+            type: string
+            format: date-time
+          example: "2025-10-01T00:00:00Z"
+
+        - name: time_end
+          in: query
+          description: End of time range
+          schema:
+            type: string
+            format: date-time
+          example: "2025-10-16T23:59:59Z"
+
+        - name: bucket_size
+          in: query
+          description: Score bucket size (e.g., 2 = buckets of 0-1, 2-3, 4-5...)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+            default: 2
+
+      responses:
+        '200':
+          description: Score distribution histogram
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreDistribution'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /analytics/trendlines:
+    get:
+      tags:
+        - analytics
+      summary: Get detection trendlines
+      description: |
+        Retrieve time-series detection counts for dashboard graphs.
+
+        **RBAC**: Analyst, Admin
+
+        **User Story**: FR-012 - Dashboard shows detection trendlines
+
+        **Data Source**: ClickHouse `aggregated_metrics` materialized view (SC-007: ≤2s queries)
+
+      operationId: getTrendlines
+      parameters:
+        - name: time_start
+          in: query
+          required: true
+          description: Start of time range
+          schema:
+            type: string
+            format: date-time
+          example: "2025-10-01T00:00:00Z"
+
+        - name: time_end
+          in: query
+          required: true
+          description: End of time range
+          schema:
+            type: string
+            format: date-time
+          example: "2025-10-16T23:59:59Z"
+
+        - name: granularity
+          in: query
+          description: Time bucket granularity
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: day
+
+        - name: classification
+          in: query
+          description: Filter by classification (optional, all if omitted)
+          schema:
+            type: string
+            enum: [authorized, suspect, unauthorized]
+
+      responses:
+        '200':
+          description: Detection trendlines
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trendlines'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /analytics/summary:
+    get:
+      tags:
+        - analytics
+      summary: Get dashboard summary statistics
+      description: |
+        Retrieve high-level statistics for dashboard overview.
+
+        **RBAC**: All roles (data scoped by role: Developer sees own endpoints, Analyst/Admin see all)
+
+        **User Story**: FR-012 - Dashboard shows active MCPs, score distribution
+
+      operationId: getDashboardSummary
+      parameters:
+        - name: time_window_hours
+          in: query
+          description: Time window for "recent" statistics (default 24 hours)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 720
+            default: 24
+
+      responses:
+        '200':
+          description: Dashboard summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+              example:
+                total_detections_recent: 127
+                total_detections_all_time: 8543
+                active_hosts: 42
+                classification_breakdown:
+                  authorized: 15
+                  suspect: 38
+                  unauthorized: 74
+                avg_score: 8.3
+                high_risk_count: 23
+                judge_unavailable_count: 3
+                false_positive_rate: 0.08
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+# Components
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    FindingID:
+      name: id
+      in: path
+      required: true
+      description: Detection finding UUID (ClickHouse detections.detection_id)
+      schema:
+        type: string
+        format: uuid
+      example: "770e8400-e29b-41d4-a716-446655440002"
+
+  schemas:
+    # Finding Schemas
+    FindingSummary:
+      type: object
+      required:
+        - detection_id
+        - timestamp
+        - host_id_hash
+        - host
+        - port
+        - score
+        - classification
+        - registry_matched
+        - evidence_count
+        - judge_available
+      properties:
+        detection_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: Detection time
+        host_id_hash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA256(original_host_id) per FR-008
+        host:
+          type: string
+          description: IP address or hostname (not hashed, for routing)
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        score:
+          type: integer
+          minimum: 0
+          description: Combined score from all evidence sources
+        classification:
+          type: string
+          enum: [authorized, suspect, unauthorized]
+        registry_matched:
+          type: boolean
+          description: True if matched against authorized registry (FR-005)
+        registry_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Registry entry ID if matched
+        evidence_count:
+          type: integer
+          description: Number of evidence items (endpoint + network + gateway)
+        judge_available:
+          type: boolean
+          description: False if Judge service unavailable at detection time (FR-020b)
+        created_at:
+          type: string
+          format: date-time
+
+    FindingDetail:
+      allOf:
+        - $ref: '#/components/schemas/FindingSummary'
+        - type: object
+          required:
+            - composite_id
+            - evidence
+          properties:
+            composite_id:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+              description: SHA256(host:port:manifest:proc_sig) for FR-005a
+            evidence:
+              type: array
+              description: All evidence items from endpoint, network, gateway sources
+              items:
+                $ref: '#/components/schemas/Evidence'
+            judge_classification:
+              type: string
+              nullable: true
+              description: Judge classification label (if available)
+            judge_confidence:
+              type: number
+              nullable: true
+              minimum: 0.0
+              maximum: 1.0
+              description: Judge confidence score
+            judge_explanation:
+              type: string
+              nullable: true
+              description: Plain-language reasoning from Judge (US5)
+            dedup_window_start:
+              type: string
+              format: date-time
+              description: Start of 5-minute deduplication window (FR-002a)
+            dedup_window_end:
+              type: string
+              format: date-time
+            merged_detection_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: Original detection IDs if merged during deduplication
+            updated_at:
+              type: string
+              format: date-time
+
+    Evidence:
+      type: object
+      required:
+        - type
+        - source
+        - score_contribution
+        - detected_at
+        - snippet
+      properties:
+        type:
+          type: string
+          enum: [endpoint, network, gateway]
+          description: Signal source type
+        source:
+          type: string
+          description: Specific source identifier (scanner version, sensor ID, judge version)
+        score_contribution:
+          type: integer
+          minimum: 0
+          description: Partial score contributed by this evidence
+        detected_at:
+          type: string
+          format: date-time
+          description: When this evidence was collected
+        snippet:
+          type: string
+          maxLength: 1024
+          description: Evidence excerpt (≤1KB per FR-009)
+        metadata:
+          type: object
+          description: Type-specific metadata (file_path, signature_id, etc.)
+          additionalProperties: true
+
+    FindingsList:
+      type: object
+      required:
+        - findings
+        - total
+        - page
+        - page_size
+      properties:
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/FindingSummary'
+        total:
+          type: integer
+          description: Total number of findings matching filter
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    UpdateFindingRequest:
+      type: object
+      description: Update finding operational metadata (not feedback - use /feedback endpoint)
+      properties:
+        notes:
+          type: string
+          maxLength: 1024
+          description: Operational notes (for internal tracking)
+
+    # Analytics Schemas
+    ScoreDistribution:
+      type: object
+      required:
+        - buckets
+        - time_range
+      properties:
+        buckets:
+          type: array
+          items:
+            type: object
+            required:
+              - score_range
+              - count
+            properties:
+              score_range:
+                type: string
+                description: Score range (e.g., "0-1", "2-3")
+                example: "9-10"
+              count:
+                type: integer
+                description: Number of detections in this range
+                example: 23
+        time_range:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+
+    Trendlines:
+      type: object
+      required:
+        - data_points
+        - granularity
+        - time_range
+      properties:
+        data_points:
+          type: array
+          items:
+            type: object
+            required:
+              - timestamp
+              - detection_count
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+                description: Bucket timestamp (start of hour/day/week)
+              detection_count:
+                type: integer
+                description: Number of detections in this bucket
+              avg_score:
+                type: number
+                description: Average score for this bucket
+              unique_hosts:
+                type: integer
+                description: Unique host count in this bucket
+              classification_breakdown:
+                type: object
+                properties:
+                  authorized:
+                    type: integer
+                  suspect:
+                    type: integer
+                  unauthorized:
+                    type: integer
+        granularity:
+          type: string
+          enum: [hour, day, week]
+        time_range:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+
+    DashboardSummary:
+      type: object
+      required:
+        - total_detections_recent
+        - total_detections_all_time
+        - active_hosts
+        - classification_breakdown
+        - avg_score
+        - high_risk_count
+        - judge_unavailable_count
+      properties:
+        total_detections_recent:
+          type: integer
+          description: Detections in time window (default 24h)
+        total_detections_all_time:
+          type: integer
+          description: All-time detection count
+        active_hosts:
+          type: integer
+          description: Unique hosts with detections in time window
+        classification_breakdown:
+          type: object
+          required:
+            - authorized
+            - suspect
+            - unauthorized
+          properties:
+            authorized:
+              type: integer
+            suspect:
+              type: integer
+            unauthorized:
+              type: integer
+        avg_score:
+          type: number
+          description: Average score across recent detections
+        high_risk_count:
+          type: integer
+          description: Number of detections with score ≥9 (unauthorized threshold)
+        judge_unavailable_count:
+          type: integer
+          description: Detections processed without Judge input (FR-020b)
+        false_positive_rate:
+          type: number
+          nullable: true
+          minimum: 0.0
+          maximum: 1.0
+          description: False positive rate from analyst feedback (null if no feedback yet)
+
+    # Error Schemas
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
