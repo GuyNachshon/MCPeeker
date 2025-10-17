@@ -1,0 +1,169 @@
+{{- if .Values.mtls.certManager.enabled }}
+---
+# Root CA Issuer
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.mtls.certManager.issuer }}
+spec:
+  ca:
+    secretName: mcpeeker-ca-secret
+
+---
+# Scanner Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: scanner-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: scanner-tls
+  duration: {{ .Values.mtls.certificateRotationDays }}d  # 90 days per FR-010
+  renewBefore: 720h  # Renew 30 days before expiration
+  issuerRef:
+    name: {{ .Values.mtls.certManager.issuer }}
+    kind: ClusterIssuer
+  commonName: scanner.mcpeeker.local
+  dnsNames:
+    - scanner
+    - scanner.{{ .Release.Namespace }}.svc
+    - scanner.{{ .Release.Namespace }}.svc.cluster.local
+    - scanner.mcpeeker.local
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# Correlator Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: correlator-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: correlator-tls
+  duration: {{ .Values.mtls.certificateRotationDays }}d
+  renewBefore: 720h
+  issuerRef:
+    name: {{ .Values.mtls.certManager.issuer }}
+    kind: ClusterIssuer
+  commonName: correlator.mcpeeker.local
+  dnsNames:
+    - correlator
+    - correlator.{{ .Release.Namespace }}.svc
+    - correlator.{{ .Release.Namespace }}.svc.cluster.local
+    - correlator.mcpeeker.local
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# Judge Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: judge-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: judge-tls
+  duration: {{ .Values.mtls.certificateRotationDays }}d
+  renewBefore: 720h
+  issuerRef:
+    name: {{ .Values.mtls.certManager.issuer }}
+    kind: ClusterIssuer
+  commonName: judge.mcpeeker.local
+  dnsNames:
+    - judge
+    - judge.{{ .Release.Namespace }}.svc
+    - judge.{{ .Release.Namespace }}.svc.cluster.local
+    - judge.mcpeeker.local
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# Registry API Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: registry-api-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: registry-api-tls
+  duration: {{ .Values.mtls.certificateRotationDays }}d
+  renewBefore: 720h
+  issuerRef:
+    name: {{ .Values.mtls.certManager.issuer }}
+    kind: ClusterIssuer
+  commonName: registry-api.mcpeeker.local
+  dnsNames:
+    - registry-api
+    - registry-api.{{ .Release.Namespace }}.svc
+    - registry-api.{{ .Release.Namespace }}.svc.cluster.local
+    - registry-api.mcpeeker.local
+    - api.mcpeeker.local
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# Signature Engine Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: signature-engine-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: signature-engine-tls
+  duration: {{ .Values.mtls.certificateRotationDays }}d
+  renewBefore: 720h
+  issuerRef:
+    name: {{ .Values.mtls.certManager.issuer }}
+    kind: ClusterIssuer
+  commonName: signature-engine.mcpeeker.local
+  dnsNames:
+    - signature-engine
+    - signature-engine.{{ .Release.Namespace }}.svc
+    - signature-engine.{{ .Release.Namespace }}.svc.cluster.local
+    - signature-engine.mcpeeker.local
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# Frontend Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: frontend-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: frontend-tls
+  duration: {{ .Values.mtls.certificateRotationDays }}d
+  renewBefore: 720h
+  issuerRef:
+    name: {{ .Values.mtls.certManager.issuer }}
+    kind: ClusterIssuer
+  commonName: mcpeeker.local
+  dnsNames:
+    - frontend
+    - frontend.{{ .Release.Namespace }}.svc
+    - frontend.{{ .Release.Namespace }}.svc.cluster.local
+    - mcpeeker.local
+    - "*.mcpeeker.local"
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+
+{{- end }}

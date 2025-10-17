@@ -1,0 +1,129 @@
+# NATS JetStream Stream Configurations
+# MCPeeker Detection Platform
+# Reference: specs/001-mcp-detection-platform/contracts/events.yaml
+
+streams:
+  # Endpoint detection events (file/process scans)
+  - name: endpoint.events
+    subjects:
+      - "endpoint.detection.file"
+      - "endpoint.detection.process"
+    retention: limits
+    max_age: 604800s  # 7 days (FR-020c: Judge service recovery window)
+    max_msgs: 100000000  # 100M messages (aligns with FR-027 scale)
+    max_bytes: 107374182400  # 100GB
+    storage: file
+    replicas: 3  # High availability across NATS cluster nodes
+    discard: old  # Discard oldest messages when limits reached
+    duplicate_window: 300s  # 5 minutes (FR-002a deduplication window)
+    description: "Endpoint scanner detections from file/process monitoring"
+
+  # Network traffic detection events (Zeek/Suricata)
+  - name: network.events
+    subjects:
+      - "network.detection.zeek"
+      - "network.detection.suricata"
+    retention: limits
+    max_age: 604800s  # 7 days
+    max_msgs: 100000000  # 100M messages
+    max_bytes: 107374182400  # 100GB
+    storage: file
+    replicas: 3
+    discard: old
+    duplicate_window: 300s  # 5 minutes
+    description: "Network IDS detections from Zeek and Suricata sensors"
+
+  # Gateway LLM Judge classification events
+  - name: gateway.events
+    subjects:
+      - "gateway.classification.judge"
+    retention: limits
+    max_age: 604800s  # 7 days
+    max_msgs: 50000000  # Lower volume expected (not every endpoint generates gateway traffic)
+    max_bytes: 53687091200  # 50GB
+    storage: file
+    replicas: 3
+    discard: old
+    duplicate_window: 300s  # 5 minutes
+    description: "LLM Judge service classifications from gateway requests"
+
+# Consumer configurations for correlator service
+consumers:
+  # Correlator consumes endpoint events
+  - name: correlator-endpoint-consumer
+    stream: endpoint.events
+    durable_name: correlator-endpoint-consumer
+    deliver_policy: all  # Process all messages from stream start
+    ack_policy: explicit  # Manual acknowledgment after ClickHouse write
+    ack_wait: 30s  # Allow 30s for ClickHouse write + retry
+    max_deliver: 3  # Retry up to 3 times before DLQ
+    filter_subject: "endpoint.detection.*"  # Subscribe to all endpoint subjects
+    description: "Correlator service endpoint event consumer"
+
+  # Correlator consumes network events
+  - name: correlator-network-consumer
+    stream: network.events
+    durable_name: correlator-network-consumer
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 30s
+    max_deliver: 3
+    filter_subject: "network.detection.*"
+    description: "Correlator service network event consumer"
+
+  # Correlator consumes gateway events
+  - name: correlator-gateway-consumer
+    stream: gateway.events
+    durable_name: correlator-gateway-consumer
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 30s
+    max_deliver: 3
+    filter_subject: "gateway.classification.*"
+    description: "Correlator service gateway event consumer"
+
+  # Signature Engine consumers (one per stream)
+  - name: signature-engine-endpoint-consumer
+    stream: endpoint.events
+    durable_name: signature-engine-endpoint-consumer
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 10s  # Faster processing for signature matching
+    max_deliver: 3
+    filter_subject: "endpoint.detection.*"
+    description: "Signature Engine endpoint event consumer"
+
+  - name: signature-engine-network-consumer
+    stream: network.events
+    durable_name: signature-engine-network-consumer
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 10s
+    max_deliver: 3
+    filter_subject: "network.detection.*"
+    description: "Signature Engine network event consumer"
+
+  - name: signature-engine-gateway-consumer
+    stream: gateway.events
+    durable_name: signature-engine-gateway-consumer
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 10s
+    max_deliver: 3
+    filter_subject: "gateway.classification.*"
+    description: "Signature Engine gateway event consumer"
+
+# CLI commands to create streams (for manual setup)
+# Run these commands after NATS server is running:
+#
+# nats stream add endpoint.events --config infrastructure/configs/nats-streams.yaml
+# nats stream add network.events --config infrastructure/configs/nats-streams.yaml
+# nats stream add gateway.events --config infrastructure/configs/nats-streams.yaml
+#
+# To create consumers:
+# nats consumer add endpoint.events correlator-endpoint-consumer --config infrastructure/configs/nats-streams.yaml
+#
+# To view stream status:
+# nats stream info endpoint.events
+# nats stream info network.events
+# nats stream info gateway.events

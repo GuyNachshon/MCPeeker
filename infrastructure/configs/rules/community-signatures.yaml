@@ -1,0 +1,289 @@
+# Community MCP Detection Signatures
+# Reference: US4 (Signature engine), T056
+
+rules:
+  # Rule 001: MCP Server on Standard Ports
+  - id: "mcp-001"
+    name: "MCP Server on Standard Port Range"
+    description: "Detects MCP servers running on standard port range 3000-3100"
+    severity: "low"
+    tags:
+      - "mcp"
+      - "port-detection"
+      - "standard-port"
+    conditions:
+      - field: "evidence.port"
+        operator: "gte"
+        value: 3000
+      - field: "evidence.port"
+        operator: "lte"
+        value: 3100
+    enrichment:
+      rule_category: "port-based-detection"
+      confidence: "medium"
+
+  # Rule 002: MCP Manifest File Detection
+  - id: "mcp-002"
+    name: "MCP Manifest File Detected"
+    description: "Detects manifest.json files indicating MCP server presence"
+    severity: "medium"
+    tags:
+      - "mcp"
+      - "file-detection"
+      - "manifest"
+    conditions:
+      - field: "evidence.file_path"
+        operator: "contains"
+        value: "manifest.json"
+    enrichment:
+      rule_category: "manifest-detection"
+      confidence: "high"
+      recommendation: "Verify MCP server is authorized and register if legitimate"
+
+  # Rule 003: Claude Desktop MCP Servers
+  - id: "mcp-003"
+    name: "Claude Desktop MCP Configuration"
+    description: "Detects MCP servers in Claude Desktop config directory"
+    severity: "low"
+    tags:
+      - "mcp"
+      - "claude-desktop"
+      - "known-location"
+    conditions:
+      - field: "evidence.file_path"
+        operator: "regex"
+        value: ".*/\\.claude/.*"
+    enrichment:
+      rule_category: "known-application"
+      application: "claude-desktop"
+      confidence: "high"
+      auto_approve_candidate: true
+
+  # Rule 004: Development MCP Servers (Local)
+  - id: "mcp-004"
+    name: "Development MCP Server (localhost)"
+    description: "MCP server running on localhost - likely development"
+    severity: "low"
+    tags:
+      - "mcp"
+      - "development"
+      - "localhost"
+    conditions:
+      - field: "host_id"
+        operator: "in"
+        value: ["localhost", "127.0.0.1", "::1"]
+    enrichment:
+      rule_category: "development-server"
+      environment: "local"
+      risk_level: "low"
+
+  # Rule 005: High Port MCP (Non-Standard)
+  - id: "mcp-005"
+    name: "MCP Server on High Port"
+    description: "MCP server running on non-standard high port (>10000)"
+    severity: "medium"
+    tags:
+      - "mcp"
+      - "high-port"
+      - "suspicious"
+    conditions:
+      - field: "evidence.port"
+        operator: "gt"
+        value: 10000
+    enrichment:
+      rule_category: "suspicious-port"
+      risk_level: "elevated"
+      recommendation: "Investigate why MCP is on non-standard port"
+
+  # Rule 006: Python MCP Server Process
+  - id: "mcp-006"
+    name: "Python MCP Server Process"
+    description: "Detects Python-based MCP server processes"
+    severity: "low"
+    tags:
+      - "mcp"
+      - "python"
+      - "process"
+    conditions:
+      - field: "evidence.process_name"
+        operator: "regex"
+        value: "python.*"
+      - field: "evidence.command_line"
+        operator: "contains"
+        value: "mcp"
+    enrichment:
+      rule_category: "language-detection"
+      implementation_language: "python"
+
+  # Rule 007: Node.js MCP Server Process
+  - id: "mcp-007"
+    name: "Node.js MCP Server Process"
+    description: "Detects Node.js-based MCP server processes"
+    severity: "low"
+    tags:
+      - "mcp"
+      - "nodejs"
+      - "process"
+    conditions:
+      - field: "evidence.process_name"
+        operator: "regex"
+        value: "node.*"
+      - field: "evidence.command_line"
+        operator: "contains"
+        value: "mcp"
+    enrichment:
+      rule_category: "language-detection"
+      implementation_language: "nodejs"
+
+  # Rule 008: MCP Network Traffic Pattern (Zeek)
+  - id: "mcp-008"
+    name: "MCP JSON-RPC Network Traffic"
+    description: "Network traffic matching MCP JSON-RPC patterns"
+    severity: "medium"
+    tags:
+      - "mcp"
+      - "network"
+      - "zeek"
+    conditions:
+      - field: "source"
+        operator: "equals"
+        value: "network.zeek"
+      - field: "evidence.service"
+        operator: "in"
+        value: ["json", "http", "unknown"]
+    enrichment:
+      rule_category: "network-detection"
+      detection_method: "zeek"
+      confidence: "medium"
+
+  # Rule 009: MCP Suricata Alert
+  - id: "mcp-009"
+    name: "MCP Suricata Signature Match"
+    description: "Suricata signature matched MCP traffic pattern"
+    severity: "medium"
+    tags:
+      - "mcp"
+      - "network"
+      - "suricata"
+    conditions:
+      - field: "source"
+        operator: "equals"
+        value: "network.suricata"
+      - field: "evidence.alert_signature"
+        operator: "regex"
+        value: ".*MCP.*"
+    enrichment:
+      rule_category: "network-detection"
+      detection_method: "suricata"
+      confidence: "high"
+
+  # Rule 010: Unauthorized LLM Sampling
+  - id: "mcp-010"
+    name: "Unauthorized LLM Sampling Request"
+    description: "MCP server making sampling/createMessage requests (high risk)"
+    severity: "high"
+    tags:
+      - "mcp"
+      - "llm-interaction"
+      - "high-risk"
+    conditions:
+      - field: "evidence.snippet"
+        operator: "contains"
+        value: "sampling/createMessage"
+    enrichment:
+      rule_category: "llm-interaction"
+      risk_level: "high"
+      recommendation: "Immediately verify authorization - LLM sampling has data exposure risk"
+
+  # Rule 011: MCP Tools Registration
+  - id: "mcp-011"
+    name: "MCP Tools List Request"
+    description: "MCP server listing available tools"
+    severity: "low"
+    tags:
+      - "mcp"
+      - "tools"
+      - "registration"
+    conditions:
+      - field: "evidence.snippet"
+        operator: "contains"
+        value: "tools/list"
+    enrichment:
+      rule_category: "capability-discovery"
+      mcp_capability: "tools"
+
+  # Rule 012: MCP Resources Access
+  - id: "mcp-012"
+    name: "MCP Resource Access"
+    description: "MCP server accessing resources"
+    severity: "medium"
+    tags:
+      - "mcp"
+      - "resources"
+      - "data-access"
+    conditions:
+      - field: "evidence.snippet"
+        operator: "regex"
+        value: "resources/(list|read)"
+    enrichment:
+      rule_category: "data-access"
+      mcp_capability: "resources"
+      risk_level: "medium"
+      recommendation: "Verify resource access permissions"
+
+  # Rule 013: Judge Service Classification
+  - id: "mcp-013"
+    name: "Judge Service High Confidence Classification"
+    description: "LLM Judge provided high-confidence classification"
+    severity: "info"
+    tags:
+      - "judge"
+      - "llm-classification"
+      - "high-confidence"
+    conditions:
+      - field: "source"
+        operator: "equals"
+        value: "gateway.judge"
+      - field: "evidence.confidence"
+        operator: "gte"
+        value: 80.0
+    enrichment:
+      rule_category: "llm-analysis"
+      confidence_level: "high"
+      trust_score: "high"
+
+  # Rule 014: Multi-Source Detection
+  - id: "mcp-014"
+    name: "Multi-Source MCP Detection"
+    description: "MCP detected by multiple evidence sources"
+    severity: "high"
+    tags:
+      - "mcp"
+      - "multi-source"
+      - "high-confidence"
+    conditions:
+      - field: "matched_rule_count"
+        operator: "gte"
+        value: 3
+    enrichment:
+      rule_category: "correlation"
+      confidence: "very-high"
+      recommendation: "High confidence detection - prioritize for investigation"
+
+  # Rule 015: Suspicious File Path
+  - id: "mcp-015"
+    name: "MCP in Suspicious Directory"
+    description: "MCP manifest in unusual or hidden directory"
+    severity: "medium"
+    tags:
+      - "mcp"
+      - "suspicious-location"
+      - "hidden"
+    conditions:
+      - field: "evidence.file_path"
+        operator: "regex"
+        value: ".*/\\..*/.*"  # Hidden directories (starts with .)
+    enrichment:
+      rule_category: "suspicious-location"
+      risk_level: "elevated"
+      recommendation: "Investigate why MCP is in hidden directory"

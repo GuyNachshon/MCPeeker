@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mcpeeker.example.com/schemas/endpoint-event.json",
+  "title": "Endpoint Detection Event",
+  "description": "Event emitted by endpoint scanner when MCP manifest file or process is detected. Published to NATS subject: endpoint.detection.{file|process}. Constitution compliance: FR-009 (snippet ≤1KB), FR-008 (host_id hashed by correlator)",
+  "type": "object",
+  "required": [
+    "event_id",
+    "timestamp",
+    "host_id",
+    "detection_type",
+    "score",
+    "evidence"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this event (UUIDv4)",
+      "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Detection time in RFC3339 format (ISO 8601)",
+      "examples": ["2025-10-16T14:32:00Z"]
+    },
+    "host_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Original host identifier (IP, hostname, or container ID). Will be hashed by correlator service before storage per FR-008.",
+      "examples": ["workstation-42.corp.example.com"]
+    },
+    "detection_type": {
+      "type": "string",
+      "enum": ["file", "process"],
+      "description": "Type of endpoint detection mechanism"
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20,
+      "description": "Endpoint signal score (highest weight in multi-layer correlation). Typical range: 5-15 for strong MCP indicators.",
+      "examples": [11]
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["source", "snippet"],
+      "description": "Detailed evidence collected by scanner",
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^scanner-v[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "Scanner version/identifier for provenance tracking",
+          "examples": ["scanner-v1.2.3"]
+        },
+        "file_path": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Path to detected manifest file (for file detection type)",
+          "examples": ["/home/alice/.mcp/manifest.json"]
+        },
+        "file_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of manifest file content",
+          "examples": ["a3c5f8d9e2b1c4a7f6e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7"]
+        },
+        "process_command": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Process command line (for process detection type)",
+          "examples": ["node /usr/local/bin/mcp-server --port 3000"]
+        },
+        "process_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of process signature (command + binary path)",
+          "examples": ["b4d6e8f0a2c4e6f8a0c2e4f6a8c0e2f4a6c8e0f2a4c6e8f0a2c4e6f8a0c2e4f6"]
+        },
+        "snippet": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "File/process excerpt (≤1KB per FR-009 privacy requirement). For files: first 1KB of manifest JSON. For processes: command line + environment variables excerpt.",
+          "examples": ["{\"name\":\"my-mcp-server\",\"version\":\"1.0.0\",\"protocol\":\"mcp/1.0\"}"]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Detected TCP port from manifest or process arguments. Used for composite identifier construction.",
+          "examples": [3000]
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional scanner-specific metadata (extensibility)",
+          "additionalProperties": true,
+          "examples": [{
+            "scan_duration_ms": 42,
+            "file_size_bytes": 512,
+            "process_pid": 12345
+          }]
+        }
+      }
+    }
+  }
+}

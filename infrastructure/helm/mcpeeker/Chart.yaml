@@ -1,0 +1,17 @@
+apiVersion: v2
+name: mcpeeker
+description: MCP Detection and Registry Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - mcp
+  - security
+  - detection
+  - llm
+home: https://github.com/ozlabs/mcpeeker
+sources:
+  - https://github.com/ozlabs/mcpeeker
+maintainers:
+  - name: MCPeeker Team
+    email: team@mcpeeker.io

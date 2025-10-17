@@ -1,0 +1,117 @@
+{{- if .Values.scanner.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scanner
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: scanner
+    component: detection
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.scanner.replicaCount }}
+  selector:
+    matchLabels:
+      app: scanner
+  template:
+    metadata:
+      labels:
+        app: scanner
+        component: detection
+        version: {{ .Chart.AppVersion }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: scanner
+      containers:
+      - name: scanner
+        image: "{{ .Values.scanner.image.repository }}:{{ .Values.scanner.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.scanner.image.pullPolicy | default "IfNotPresent" }}
+        ports:
+        - name: metrics
+          containerPort: 9091
+          protocol: TCP
+        env:
+        - name: NATS_URL
+          value: "{{ .Values.global.nats.url }}"
+        - name: CONFIG_PATH
+          value: "/etc/mcpeeker/scanner.yaml"
+        - name: LOG_LEVEL
+          value: "{{ .Values.scanner.logLevel | default "info" }}"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mcpeeker
+          readOnly: true
+        {{- if .Values.mtls.enabled }}
+        - name: tls-certs
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.scanner.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 9091
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 9091
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      - name: config
+        configMap:
+          name: scanner-config
+      {{- if .Values.mtls.enabled }}
+      - name: tls-certs
+        secret:
+          secretName: scanner-tls
+      {{- end }}
+      {{- with .Values.scanner.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scanner.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scanner.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scanner
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: scanner
+    component: detection
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9091
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  selector:
+    app: scanner
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scanner
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: scanner
+{{- end }}

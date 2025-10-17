@@ -1,0 +1,67 @@
+# Judge service configuration
+# Reference: FR-020 (≤400ms inference latency), US5 (Transparency)
+
+service:
+  name: "judge"
+  port: 8003
+  workers: 4  # Async workers per CPU core
+  log_level: "INFO"
+
+# LLM Configuration (Claude API for superior classification)
+llm:
+  provider: "anthropic"
+  model_name: "claude-3-5-sonnet-20241022"
+  api_key_env: "ANTHROPIC_API_KEY"  # Read from environment variable
+  max_tokens: 1024
+  temperature: 0.0  # Deterministic for consistency
+  timeout_seconds: 10
+
+# Inference Configuration
+inference:
+  timeout_ms: 400  # Target p95 latency per FR-020
+  max_retry_attempts: 2
+  backoff_seconds: 1
+
+# Cache Configuration (Redis for ≤10ms lookup)
+cache:
+  enabled: true
+  backend: "redis"
+  redis_url: "${REDIS_URL:redis://localhost:6379/0}"
+  ttl_seconds: 3600  # 1 hour
+  max_memory_mb: 512
+  eviction_policy: "allkeys-lru"
+
+# NATS Configuration
+nats:
+  url: "${NATS_URL:nats://localhost:4222}"
+  publish_classifications: true
+  stream_name: "gateway-events"
+  subject: "gateway.classification.judge"
+
+# Metrics Configuration
+metrics:
+  enabled: true
+  port: 9093
+  path: "/metrics"
+  track_latency: true
+  track_cache_hits: true
+  track_errors: true
+
+# Health Check
+health:
+  enabled: true
+  path: "/health"
+  check_redis: true
+  check_nats: true
+  timeout_seconds: 5
+
+# Scoring Weights (FR-003)
+scoring:
+  authorized_score: 0      # No penalty for authorized LLM usage
+  suspect_score: 3         # Moderate concern
+  unauthorized_score: 5    # High concern
+
+# Classification Thresholds
+classification:
+  confidence_threshold: 50.0  # Minimum confidence to apply non-SUSPECT classification
+  high_confidence: 80.0       # Threshold for high confidence classification

@@ -1,0 +1,66 @@
+{{- if .Values.persistence.enabled }}
+---
+# PostgreSQL PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.persistence.storageClass | default "standard" }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.postgres.size | default "10Gi" }}
+---
+# ClickHouse PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clickhouse-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: clickhouse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.persistence.storageClass | default "standard" }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.clickhouse.size | default "50Gi" }}
+---
+# Redis PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: redis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.persistence.storageClass | default "standard" }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.redis.size | default "5Gi" }}
+---
+# NATS PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nats-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nats
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.persistence.storageClass | default "standard" }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.nats.size | default "10Gi" }}
+{{- end }}

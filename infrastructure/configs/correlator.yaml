@@ -1,0 +1,28 @@
+# Correlator service configuration
+# Reference: FR-002a (5-minute dedup), FR-003 (scoring weights), FR-005 (-6 registry penalty)
+
+correlator:
+  # Deduplication window in seconds (FR-002a: default 5 minutes)
+  dedup_window_seconds: 300
+
+  # Scoring weights for multi-layer correlation (FR-003)
+  scoring_weights:
+    endpoint: 11  # Highest weight (file/process detection)
+    judge: 5      # Medium weight (LLM classification)
+    network: 3    # Supporting weight (traffic signatures)
+
+  # Registry penalty for authorized MCPs (FR-005: -6 points)
+  registry_penalty: -6
+
+  # Max concurrent event processing workers
+  max_workers: 4
+
+  # Batch size for ClickHouse inserts (performance optimization)
+  batch_size: 100
+
+  # Batch timeout for ClickHouse inserts
+  batch_timeout: 5s
+
+# NATS consumer group for correlator
+nats:
+  consumer_group: correlator-group

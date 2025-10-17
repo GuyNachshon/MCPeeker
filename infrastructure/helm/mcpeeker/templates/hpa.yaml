@@ -1,0 +1,176 @@
+{{- if .Values.autoscaling.enabled }}
+---
+# Scanner HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: scanner-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: scanner
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: scanner
+  minReplicas: {{ .Values.scanner.autoscaling.minReplicas | default 2 }}
+  maxReplicas: {{ .Values.scanner.autoscaling.maxReplicas | default 10 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.scanner.autoscaling.targetCPU | default 70 }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.scanner.autoscaling.targetMemory | default 80 }}
+---
+# Correlator HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: correlator-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: correlator
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: correlator
+  minReplicas: {{ .Values.correlator.autoscaling.minReplicas | default 3 }}
+  maxReplicas: {{ .Values.correlator.autoscaling.maxReplicas | default 15 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.correlator.autoscaling.targetCPU | default 70 }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.correlator.autoscaling.targetMemory | default 80 }}
+---
+# Signature Engine HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: signature-engine-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: signature-engine
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: signature-engine
+  minReplicas: {{ .Values.signatureEngine.autoscaling.minReplicas | default 2 }}
+  maxReplicas: {{ .Values.signatureEngine.autoscaling.maxReplicas | default 10 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.signatureEngine.autoscaling.targetCPU | default 70 }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.signatureEngine.autoscaling.targetMemory | default 80 }}
+---
+# Judge HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: judge-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: judge
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: judge
+  minReplicas: {{ .Values.judge.autoscaling.minReplicas | default 2 }}
+  maxReplicas: {{ .Values.judge.autoscaling.maxReplicas | default 10 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.judge.autoscaling.targetCPU | default 70 }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.judge.autoscaling.targetMemory | default 80 }}
+---
+# Registry API HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: registry-api-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: registry-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: registry-api
+  minReplicas: {{ .Values.registryApi.autoscaling.minReplicas | default 3 }}
+  maxReplicas: {{ .Values.registryApi.autoscaling.maxReplicas | default 20 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.registryApi.autoscaling.targetCPU | default 70 }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.registryApi.autoscaling.targetMemory | default 80 }}
+---
+# Frontend HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend
+  minReplicas: {{ .Values.frontend.autoscaling.minReplicas | default 2 }}
+  maxReplicas: {{ .Values.frontend.autoscaling.maxReplicas | default 10 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.frontend.autoscaling.targetCPU | default 70 }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.frontend.autoscaling.targetMemory | default 80 }}
+{{- end }}

@@ -1,0 +1,27 @@
+# Registry API service configuration
+# Reference: FR-006 (registration), FR-031-035 (RBAC)
+
+registry_api:
+  host: 0.0.0.0
+  port: 8000
+  reload: true  # Auto-reload in dev (set false in prod)
+  workers: 4    # Uvicorn workers
+
+  # CORS origins (FR-010: restrict in production)
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:5173  # Vite dev server
+
+  # JWT settings for authentication
+  jwt_secret: changeme_in_production  # MUST be changed for prod
+  jwt_algorithm: HS256
+  jwt_expiration_minutes: 1440  # 24 hours
+
+# Notification delivery settings (FR-025a)
+notification:
+  smtp_host: localhost
+  smtp_port: 1025  # Mailhog for local dev
+  smtp_username: ""
+  smtp_password: ""
+  smtp_from_email: noreply@mcpeeker.local
+  webhook_timeout_seconds: 10  # Timeout for Slack/Teams webhooks

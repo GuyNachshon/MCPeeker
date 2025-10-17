@@ -1,0 +1,149 @@
+{{- if .Values.correlator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: correlator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: correlator
+    component: detection
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.correlator.replicaCount }}
+  selector:
+    matchLabels:
+      app: correlator
+  template:
+    metadata:
+      labels:
+        app: correlator
+        component: detection
+        version: {{ .Chart.AppVersion }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9092"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: correlator
+      containers:
+      - name: correlator
+        image: "{{ .Values.correlator.image.repository }}:{{ .Values.correlator.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.correlator.image.pullPolicy | default "IfNotPresent" }}
+        ports:
+        - name: metrics
+          containerPort: 9092
+          protocol: TCP
+        env:
+        - name: NATS_URL
+          value: "{{ .Values.global.nats.url }}"
+        - name: CLICKHOUSE_HOST
+          value: "{{ .Values.global.clickhouse.host }}"
+        - name: CLICKHOUSE_PORT
+          value: "{{ .Values.global.clickhouse.port }}"
+        - name: CLICKHOUSE_DB
+          value: "{{ .Values.global.clickhouse.database }}"
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-credentials
+              key: username
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-credentials
+              key: password
+        - name: POSTGRES_HOST
+          value: "{{ .Values.global.postgres.host }}"
+        - name: POSTGRES_PORT
+          value: "{{ .Values.global.postgres.port }}"
+        - name: POSTGRES_DB
+          value: "{{ .Values.global.postgres.database }}"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
+        - name: CONFIG_PATH
+          value: "/etc/mcpeeker/correlator.yaml"
+        - name: LOG_LEVEL
+          value: "{{ .Values.correlator.logLevel | default "info" }}"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mcpeeker
+          readOnly: true
+        {{- if .Values.mtls.enabled }}
+        - name: tls-certs
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.correlator.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 9092
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 9092
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      - name: config
+        configMap:
+          name: correlator-config
+      {{- if .Values.mtls.enabled }}
+      - name: tls-certs
+        secret:
+          secretName: correlator-tls
+      {{- end }}
+      {{- with .Values.correlator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.correlator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.correlator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: correlator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: correlator
+    component: detection
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9092
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  selector:
+    app: correlator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: correlator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: correlator
+{{- end }}

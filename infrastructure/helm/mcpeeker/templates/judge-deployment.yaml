@@ -1,0 +1,125 @@
+{{- if .Values.judge.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: judge
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: judge
+    component: classification
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.judge.replicaCount }}
+  selector:
+    matchLabels:
+      app: judge
+  template:
+    metadata:
+      labels:
+        app: judge
+        component: classification
+        version: {{ .Chart.AppVersion }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8003"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: judge
+      containers:
+      - name: judge
+        image: "{{ .Values.judge.image.repository }}:{{ .Values.judge.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.judge.image.pullPolicy | default "IfNotPresent" }}
+        ports:
+        - name: http
+          containerPort: 8003
+          protocol: TCP
+        - name: metrics
+          containerPort: 9093
+          protocol: TCP
+        env:
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: anthropic-credentials
+              key: api-key
+        - name: REDIS_URL
+          value: "{{ .Values.global.redis.url }}"
+        - name: NATS_URL
+          value: "{{ .Values.global.nats.url }}"
+        - name: LOG_LEVEL
+          value: "{{ .Values.judge.logLevel | default "info" }}"
+        - name: CACHE_TTL
+          value: "{{ .Values.judge.cacheTTL | default "3600" }}"
+        volumeMounts:
+        {{- if .Values.mtls.enabled }}
+        - name: tls-certs
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.judge.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8003
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      {{- if .Values.mtls.enabled }}
+      - name: tls-certs
+        secret:
+          secretName: judge-tls
+      {{- end }}
+      {{- with .Values.judge.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.judge.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.judge.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: judge
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: judge
+    component: classification
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8003
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: 9093
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  selector:
+    app: judge
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: judge
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: judge
+{{- end }}

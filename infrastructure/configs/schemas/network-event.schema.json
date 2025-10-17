@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mcpeeker.example.com/schemas/network-event.json",
+  "title": "Network Detection Event",
+  "description": "Event emitted by network IDS (Zeek/Suricata) when MCP protocol signatures detected. Published to NATS subject: network.detection.{zeek|suricata}. Constitution compliance: FR-009 (payload_excerpt ≤1KB)",
+  "type": "object",
+  "required": [
+    "event_id",
+    "timestamp",
+    "source_ip",
+    "dest_ip",
+    "dest_port",
+    "protocol",
+    "score",
+    "evidence"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this event (UUIDv4)",
+      "examples": ["660e8400-e29b-41d4-a716-446655440001"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Detection time in RFC3339 format",
+      "examples": ["2025-10-16T14:32:05Z"]
+    },
+    "source_ip": {
+      "type": "string",
+      "description": "Source IP address (client initiating connection)",
+      "examples": ["192.168.1.42"]
+    },
+    "dest_ip": {
+      "type": "string",
+      "description": "Destination IP address (target host, used for correlation with endpoint events). This is the host running the suspected MCP server.",
+      "examples": ["10.0.5.100"]
+    },
+    "dest_port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Destination TCP/UDP port",
+      "examples": [3000]
+    },
+    "protocol": {
+      "type": "string",
+      "enum": ["tcp", "udp"],
+      "description": "Transport protocol",
+      "examples": ["tcp"]
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Network signal score (supporting weight in multi-layer correlation). Typical range: 2-5 for weak signatures, 6-10 for strong signatures.",
+      "examples": [3]
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["sensor_id", "signature_id", "snippet"],
+      "description": "Detailed evidence collected by network IDS",
+      "properties": {
+        "sensor_id": {
+          "type": "string",
+          "pattern": "^(zeek|suricata)-sensor-[a-z0-9-]+$",
+          "description": "Zeek/Suricata sensor identifier for provenance tracking",
+          "examples": ["zeek-sensor-3"]
+        },
+        "signature_id": {
+          "type": "string",
+          "pattern": "^knostik:[a-z]+:[a-z0-9-]+:v[0-9]+$",
+          "description": "Knostik signature ID that matched (community-maintained rules). Format: knostik:{category}:{pattern}:{version}",
+          "examples": ["knostik:mcp:jsonrpc-handshake:v1"]
+        },
+        "payload_excerpt": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Network payload snippet (≤1KB per FR-009). Base64-encoded if binary, plain text if JSON/ASCII.",
+          "examples": ["{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{}}"]
+        },
+        "snippet": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Human-readable description of what was detected. Displayed in UI for analyst review (US2).",
+          "examples": ["JSON-RPC 2.0 initialization handshake detected on port 3000"]
+        },
+        "packet_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of packets in the analyzed flow",
+          "examples": [12]
+        },
+        "flow_duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Duration of network flow in milliseconds",
+          "examples": [450]
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional IDS-specific metadata (extensibility)",
+          "additionalProperties": true,
+          "examples": [{
+            "zeek_conn_id": "ClEkJM2Vm5giqnMf9",
+            "suricata_alert_id": 1234567
+          }]
+        }
+      }
+    }
+  }
+}
