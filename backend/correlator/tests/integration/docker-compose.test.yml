@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: mcpeeker_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data  # Ephemeral storage for test isolation
+    volumes:
+      - ./fixtures:/fixtures:ro  # Mount fixtures directory for seed data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    image: nats:latest
+    command: ["-js", "-sd", "/data"]  # Enable JetStream with storage directory
+    ports:
+      - "4223:4222"  # Use different port to avoid conflicts with dev environment
+      - "8223:8222"  # HTTP monitoring
+    tmpfs:
+      - /data  # Ephemeral storage for test messages
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    environment:
+      CLICKHOUSE_DB: mcpeeker_test
+      CLICKHOUSE_USER: test
+      CLICKHOUSE_PASSWORD: test
+    ports:
+      - "8124:8123"  # HTTP interface (different port)
+      - "9001:9000"  # Native protocol (different port)
+    tmpfs:
+      - /var/lib/clickhouse  # Ephemeral storage for test data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  registry-api:
+    build:
+      context: ../../../registry-api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://test:test@postgres:5432/mcpeeker_test
+      ENV: test
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  correlator:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      NATS_URL: nats://nats:4222
+      REGISTRY_URL: http://registry-api:8000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      DATABASE_URL: postgresql://test:test@postgres:5432/mcpeeker_test
+      ENV: test
+    depends_on:
+      nats:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      registry-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/correlator.ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  default:
+    name: mcpeeker_test_network

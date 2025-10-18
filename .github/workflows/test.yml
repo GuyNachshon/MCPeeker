@@ -1,0 +1,148 @@
+name: Test Suite
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  # T055: Unit tests run on every PR commit
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 2  # T059: 2-minute timeout for unit tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run correlator unit tests
+        working-directory: backend/correlator
+        run: |
+          go test -v -timeout 2m ./pkg/engine/...
+          echo "✓ Unit tests passed"
+
+      - name: Generate coverage report
+        working-directory: backend/correlator
+        run: |
+          go test -coverprofile=coverage.out ./pkg/engine/...
+          go tool cover -func=coverage.out
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: backend/correlator/coverage.out
+
+  # T056: Integration tests run after unit tests pass (with needs: dependency)
+  # T057: Retry logic with max 3 attempts
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests  # T056: Only run after unit tests pass
+    timeout-minutes: 5  # T060: 5-minute timeout for integration tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run integration tests with retry
+        uses: nick-fields/retry@v3  # T057: Retry action with max 3 attempts
+        with:
+          timeout_minutes: 5
+          max_attempts: 3  # 1 initial + 2 retries
+          command: |
+            cd backend/correlator/tests/integration
+            chmod +x run_integration_tests.sh
+            ./run_integration_tests.sh
+
+      - name: Upload integration test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: backend/correlator/tests/integration/*.log
+
+  # T058: Component tests run in parallel with integration tests
+  component-tests:
+    name: Component Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests  # Run after unit tests pass
+    timeout-minutes: 3  # T061: 3-minute timeout for component tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run component tests
+        working-directory: frontend
+        run: npm test -- --run
+
+      - name: Generate coverage report
+        working-directory: frontend
+        run: npm test -- --coverage --run
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-component
+          path: frontend/coverage
+
+  # Summary job to check all tests passed
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, component-tests]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
+            echo "❌ Unit tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.integration-tests.result }}" != "success" ]; then
+            echo "❌ Integration tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.component-tests.result }}" != "success" ]; then
+            echo "❌ Component tests failed"
+            exit 1
+          fi
+          echo "✅ All tests passed!"
