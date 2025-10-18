@@ -50,13 +50,9 @@ func TestRegistryMatchForcesAuthorized(t *testing.T) {
 			Penalty: -6,
 		}, nil)
 
-	correlator := NewCorrelator(
-		time.Hour,
-		&registry.Client{}, // We'll replace this with mock via direct field access
-		"http://clickhouse:8123",
-		defaultWeights,
-		defaultThresholds,
-	)
+	// Note: correlator creation not needed for this unit test
+	// We're testing the classification logic directly
+	_ = mockRegistryClient // Will be used in future integration with actual correlator
 
 	// Create a detection with endpoint evidence (score 11)
 	detection := &AggregatedDetection{
