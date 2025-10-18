@@ -20,7 +20,7 @@ NC='\033[0m' # No Color
 cleanup() {
     echo ""
     echo -e "${YELLOW}Cleaning up Docker Compose environment...${NC}"
-    docker-compose -f docker-compose.test.yml down -v > /dev/null 2>&1 || true
+    docker compose -f docker-compose.test.yml down -v > /dev/null 2>&1 || true
 }
 
 # Trap cleanup on script exit
@@ -29,7 +29,7 @@ trap cleanup EXIT
 # Step 1: Start Docker Compose services
 echo ""
 echo -e "${YELLOW}Step 1: Starting Docker Compose services...${NC}"
-docker-compose -f docker-compose.test.yml up -d
+docker compose -f docker-compose.test.yml up -d
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to start Docker Compose services${NC}"
@@ -46,7 +46,7 @@ echo "This may take up to 30 seconds..."
 # Wait for PostgreSQL
 MAX_ATTEMPTS=15
 ATTEMPT=0
-until docker-compose -f docker-compose.test.yml exec -T postgres pg_isready -U test > /dev/null 2>&1; do
+until docker compose -f docker-compose.test.yml exec -T postgres pg_isready -U test > /dev/null 2>&1; do
     ATTEMPT=$((ATTEMPT+1))
     if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
         echo -e "${RED}PostgreSQL did not become ready in time${NC}"
@@ -65,7 +65,7 @@ echo -e "${GREEN}✓ NATS ready${NC}"
 # Step 3: Seed database
 echo ""
 echo -e "${YELLOW}Step 3: Seeding database...${NC}"
-docker-compose -f docker-compose.test.yml exec -T postgres \
+docker compose -f docker-compose.test.yml exec -T postgres \
     psql -U test -d mcpeeker_test -f /fixtures/seed.sql > /dev/null 2>&1
 
 if [ $? -ne 0 ]; then
