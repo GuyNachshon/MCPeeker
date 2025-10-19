@@ -55,7 +55,7 @@ func TestMain(m *testing.M) {
 	fmt.Println("Starting Docker Compose test environment...")
 
 	// Start Docker Compose services
-	cmd := exec.Command("docker-compose", "-f", "docker-compose.test.yml", "up", "-d")
+	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -88,7 +88,7 @@ func TestMain(m *testing.M) {
 // cleanup stops and removes Docker Compose services
 func cleanup() {
 	fmt.Println("Cleaning up Docker Compose environment...")
-	cmd := exec.Command("docker-compose", "-f", "docker-compose.test.yml", "down", "-v")
+	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "down", "-v")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Run()
@@ -97,7 +97,7 @@ func cleanup() {
 // T022: seedDatabase loads test data into PostgreSQL
 func seedDatabase() error {
 	cmd := exec.Command(
-		"docker-compose", "-f", "docker-compose.test.yml",
+		"docker", "compose", "-f", "docker-compose.test.yml",
 		"exec", "-T", "postgres",
 		"psql", "-U", postgresUser, "-d", postgresDB, "-f", "/fixtures/seed.sql",
 	)
