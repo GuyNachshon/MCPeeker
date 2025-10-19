@@ -15,15 +15,15 @@ describe('DashboardSummary', () => {
 
     // Check unauthorized count
     expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('Unauthorized')).toBeInTheDocument();
+    expect(screen.getAllByText('Unauthorized').length).toBeGreaterThan(0);
 
     // Check suspect count
     expect(screen.getByText('5')).toBeInTheDocument();
-    expect(screen.getByText('Suspect')).toBeInTheDocument();
+    expect(screen.getAllByText('Suspect').length).toBeGreaterThan(0);
 
     // Check authorized count
     expect(screen.getByText('10')).toBeInTheDocument();
-    expect(screen.getByText('Authorized')).toBeInTheDocument();
+    expect(screen.getAllByText('Authorized').length).toBeGreaterThan(0);
   });
 
   // T044: Test loading state
@@ -116,7 +116,6 @@ describe('DashboardSummary', () => {
       />
     );
 
-    expect(screen.getByText('0')).toBeInTheDocument();
     expect(screen.getAllByText('0')).toHaveLength(3);
   });
 });

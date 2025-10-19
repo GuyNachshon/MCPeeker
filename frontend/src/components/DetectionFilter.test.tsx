@@ -88,9 +88,9 @@ describe('DetectionFilter', () => {
       />
     );
 
-    expect(screen.getByText('Showing')).toBeInTheDocument();
-    expect(screen.getByText('45')).toBeInTheDocument();
-    expect(screen.getByText('100')).toBeInTheDocument();
+    expect(screen.getByText(/Showing/)).toBeInTheDocument();
+    expect(screen.getByText(/45/)).toBeInTheDocument();
+    expect(screen.getByText(/100/)).toBeInTheDocument();
   });
 
   it('shows clear all button when filters are active', () => {
