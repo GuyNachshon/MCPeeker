@@ -7,6 +7,8 @@
 import React, { useEffect, useState } from 'react';
 import { useDetectionStore } from '../store/detections';
 import type { Detection } from '../api/client';
+import { DetectionBadge } from './DetectionBadge';
+import { DetectionFilter, DetectionFilterState } from './DetectionFilter';
 
 interface DetectionListProps {
   onSelectDetection?: (detection: Detection) => void;
@@ -28,20 +30,43 @@ export const DetectionList: React.FC<DetectionListProps> = ({ onSelectDetection 
     prevPage,
   } = useDetectionStore();
 
-  const [classificationFilter, setClassificationFilter] = useState<string>('');
+  const [detectionFilters, setDetectionFilters] = useState<DetectionFilterState>({
+    hideAuthorized: false,
+    searchQuery: '',
+    dateRange: { start: null, end: null },
+    classifications: [],
+  });
 
   useEffect(() => {
     fetchDetections();
   }, [fetchDetections]);
 
-  const handleClassificationChange = (classification: string) => {
-    setClassificationFilter(classification);
-    if (classification) {
-      setFilters({ classification: classification as any });
+  const handleFilterChange = (newFilters: DetectionFilterState) => {
+    setDetectionFilters(newFilters);
+
+    // Apply filters to the store
+    const storeFilters: any = {};
+    if (newFilters.classifications.length > 0) {
+      storeFilters.classification = newFilters.classifications[0]; // Take first selected
+    }
+    if (newFilters.hideAuthorized) {
+      // Filter out authorized detections
+      storeFilters.classification = newFilters.classifications.length > 0
+        ? newFilters.classifications.filter(c => c !== 'authorized')[0]
+        : 'suspect,unauthorized';
+    }
+
+    if (Object.keys(storeFilters).length > 0) {
+      setFilters(storeFilters);
     } else {
       clearFilters();
     }
   };
+
+  // Filter detections locally based on hideAuthorized
+  const filteredDetections = detectionFilters.hideAuthorized
+    ? detections.filter(d => d.classification !== 'authorized')
+    : detections;
 
   const getClassificationBadge = (classification: string) => {
     const styles = {
@@ -69,38 +94,20 @@ export const DetectionList: React.FC<DetectionListProps> = ({ onSelectDetection 
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-gray-700">Filter by classification:</label>
-          <select
-            value={classificationFilter}
-            onChange={(e) => handleClassificationChange(e.target.value)}
-            className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">All</option>
-            <option value="authorized">Authorized</option>
-            <option value="suspect">Suspect</option>
-            <option value="unauthorized">Unauthorized</option>
-          </select>
-
-          {filters.classification && (
-            <button
-              onClick={clearFilters}
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-      </div>
+      {/* T038: Integrated DetectionFilter component */}
+      <DetectionFilter
+        filters={detectionFilters}
+        onFilterChange={handleFilterChange}
+        totalCount={total}
+        filteredCount={filteredDetections.length}
+      />
 
       {/* Detection list */}
       {isLoading ? (
         <div className="flex justify-center items-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      ) : detections.length === 0 ? (
+      ) : filteredDetections.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-8 text-center">
           <p className="text-gray-500">No detections found</p>
         </div>
@@ -130,7 +137,7 @@ export const DetectionList: React.FC<DetectionListProps> = ({ onSelectDetection 
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {detections.map((detection) => (
+              {filteredDetections.map((detection) => (
                 <tr
                   key={detection.event_id}
                   onClick={() => onSelectDetection?.(detection)}
@@ -149,9 +156,8 @@ export const DetectionList: React.FC<DetectionListProps> = ({ onSelectDetection 
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getClassificationBadge(detection.classification)}`}>
-                      {detection.classification}
-                    </span>
+                    {/* T036: Integrated DetectionBadge component */}
+                    <DetectionBadge classification={detection.classification} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                     {detection.evidence.length}
