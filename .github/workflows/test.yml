@@ -111,16 +111,6 @@ jobs:
         working-directory: frontend
         run: npm test -- --run
 
-      - name: Generate coverage report
-        working-directory: frontend
-        run: npm test -- --coverage --run
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-component
-          path: frontend/coverage
-
   # Summary job to check all tests passed
   test-summary:
     name: Test Summary
