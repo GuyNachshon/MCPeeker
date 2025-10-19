@@ -110,10 +110,10 @@
 - [X] T033 [P] [US3] Create DetectionBadge component in frontend/src/components/DetectionBadge.tsx with TypeScript types from contracts/ui-components.ts
 - [X] T034 [P] [US3] Create DashboardSummary component in frontend/src/components/DashboardSummary.tsx with count display logic
 - [X] T035 [P] [US3] Create DetectionFilter component in frontend/src/components/DetectionFilter.tsx with "Hide authorized" toggle
-- [ ] T036 [US3] Integrate DetectionBadge into detection list view in frontend/src/pages/Dashboard.tsx (FR-008) - Deferred: requires existing Dashboard page
-- [ ] T037 [US3] Integrate DashboardSummary panel at top of dashboard in frontend/src/pages/Dashboard.tsx (FR-007) - Deferred: requires existing Dashboard page
-- [ ] T038 [US3] Integrate DetectionFilter controls in frontend/src/pages/Dashboard.tsx (FR-009) - Deferred: requires existing Dashboard page
-- [ ] T039 [US3] Add detection detail view with score explanation in frontend/src/pages/DetectionDetail.tsx (FR-010) - Deferred: requires existing DetectionDetail page
+- [X] T036 [US3] Integrate DetectionBadge into detection list view in frontend/src/components/DetectionList.tsx (FR-008)
+- [X] T037 [US3] Integrate DashboardSummary panel at top of dashboard in frontend/src/pages/Dashboard.tsx (FR-007)
+- [X] T038 [US3] Integrate DetectionFilter controls in frontend/src/components/DetectionList.tsx (FR-009)
+- [X] T039 [US3] Add detection detail view with score explanation in frontend/src/components/DetectionDetail.tsx (FR-010) - Already implemented with ScoreBreakdown and ExplanationPanel
 
 ### UI Component Tests for User Story 3
 
