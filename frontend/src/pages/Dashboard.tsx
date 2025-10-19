@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import ScoreDistributionChart from '../components/ScoreDistributionChart';
 import TrendlineChart from '../components/TrendlineChart';
+import { DashboardSummary as DashboardSummaryComponent } from '../components/DashboardSummary';
 
 interface DashboardSummary {
   total_detections: number;
@@ -137,49 +138,14 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Classification Breakdown */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Classification Breakdown</h2>
-        <div className="grid grid-cols-3 gap-6">
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-3">
-              <span className="text-3xl font-bold text-green-700">
-                {totalClassifications > 0
-                  ? Math.round((summary.classification_breakdown.authorized / totalClassifications) * 100)
-                  : 0}
-                %
-              </span>
-            </div>
-            <p className="text-sm font-medium text-gray-500 uppercase">Authorized</p>
-            <p className="text-2xl font-bold text-green-700">{summary.classification_breakdown.authorized}</p>
-          </div>
-
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-yellow-100 rounded-full mb-3">
-              <span className="text-3xl font-bold text-yellow-700">
-                {totalClassifications > 0
-                  ? Math.round((summary.classification_breakdown.suspect / totalClassifications) * 100)
-                  : 0}
-                %
-              </span>
-            </div>
-            <p className="text-sm font-medium text-gray-500 uppercase">Suspect</p>
-            <p className="text-2xl font-bold text-yellow-700">{summary.classification_breakdown.suspect}</p>
-          </div>
-
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 rounded-full mb-3">
-              <span className="text-3xl font-bold text-red-700">
-                {totalClassifications > 0
-                  ? Math.round((summary.classification_breakdown.unauthorized / totalClassifications) * 100)
-                  : 0}
-                %
-              </span>
-            </div>
-            <p className="text-sm font-medium text-gray-500 uppercase">Unauthorized</p>
-            <p className="text-2xl font-bold text-red-700">{summary.classification_breakdown.unauthorized}</p>
-          </div>
-        </div>
+      {/* Classification Breakdown - T037: Integrated DashboardSummary component */}
+      <div className="mb-8">
+        <DashboardSummaryComponent
+          authorizedCount={summary.classification_breakdown.authorized}
+          suspectCount={summary.classification_breakdown.suspect}
+          unauthorizedCount={summary.classification_breakdown.unauthorized}
+          loading={isLoading}
+        />
       </div>
 
       {/* Score Distribution Chart */}

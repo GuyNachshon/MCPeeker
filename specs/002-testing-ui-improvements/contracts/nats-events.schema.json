@@ -1,0 +1,133 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mcpeeker.io/schemas/nats-events.json",
+  "title": "MCPeeker NATS Event Schemas",
+  "description": "JSON Schema definitions for NATS JetStream events used in integration tests",
+  "definitions": {
+    "detection-event": {
+      "type": "object",
+      "description": "Detection event published by scanner service",
+      "required": ["event_id", "timestamp", "host_id", "detection_type", "score", "evidence"],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "description": "Unique event identifier (UUID)",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Event timestamp in ISO 8601 format",
+          "format": "date-time"
+        },
+        "host_id": {
+          "type": "string",
+          "description": "Host identifier (before hashing for privacy)",
+          "minLength": 1
+        },
+        "detection_type": {
+          "type": "string",
+          "description": "Type of detection signal",
+          "enum": ["file", "process", "network", "gateway"]
+        },
+        "score": {
+          "type": "integer",
+          "description": "Initial detection score (before correlation)",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "object",
+          "description": "Detection-specific evidence",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "File path (for file detections)"
+            },
+            "hash": {
+              "type": "string",
+              "description": "Manifest file hash (SHA256)"
+            },
+            "process_name": {
+              "type": "string",
+              "description": "Process name (for process detections)"
+            },
+            "port": {
+              "type": "integer",
+              "description": "Network port (for process/network detections)",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        }
+      },
+      "examples": [
+        {
+          "event_id": "550e8400-e29b-41d4-a716-446655440000",
+          "timestamp": "2025-10-18T10:00:00Z",
+          "host_id": "testhost-001",
+          "detection_type": "file",
+          "score": 11,
+          "evidence": {
+            "path": "/home/user/.config/mcp/manifest.json",
+            "hash": "abc123def456"
+          }
+        }
+      ]
+    },
+    "registry-match-request": {
+      "type": "object",
+      "description": "Request to registry API for matching",
+      "required": ["composite_id", "host_id_hash"],
+      "properties": {
+        "composite_id": {
+          "type": "string",
+          "description": "Composite identifier (host:port:hash:signature)"
+        },
+        "host_id_hash": {
+          "type": "string",
+          "description": "SHA256 hash of host_id"
+        },
+        "manifest_hash": {
+          "type": "string",
+          "description": "SHA256 hash of manifest file content"
+        }
+      },
+      "examples": [
+        {
+          "composite_id": "testhost:3000:abc123:sig456",
+          "host_id_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "manifest_hash": "abc123def456"
+        }
+      ]
+    },
+    "registry-match-response": {
+      "type": "object",
+      "description": "Response from registry API",
+      "required": ["matched"],
+      "properties": {
+        "matched": {
+          "type": "boolean",
+          "description": "True if MCP found in authorized registry"
+        },
+        "entry_id": {
+          "type": "string",
+          "description": "UUID of matched registry entry (if matched)",
+          "format": "uuid"
+        },
+        "expired": {
+          "type": "boolean",
+          "description": "True if registry entry has expired (implies matched=false)"
+        }
+      },
+      "examples": [
+        {
+          "matched": true,
+          "entry_id": "650e8400-e29b-41d4-a716-446655440001"
+        },
+        {
+          "matched": false,
+          "expired": true
+        }
+      ]
+    }
+  }
+}

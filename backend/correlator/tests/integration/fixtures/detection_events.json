@@ -1,0 +1,158 @@
+{
+  "events": [
+    {
+      "name": "initial_unauthorized_detection",
+      "description": "Detection event for MCP not yet in registry (should be unauthorized)",
+      "event": {
+        "event_id": "evt-001-initial",
+        "timestamp": "2025-10-18T10:00:00Z",
+        "host_id": "testhost",
+        "detection_type": "file",
+        "score": 11,
+        "evidence": {
+          "path": "/test/path/manifest.json",
+          "hash": "manifesthash123"
+        }
+      },
+      "expected_classification": "unauthorized",
+      "expected_score": 11
+    },
+    {
+      "name": "detection_after_registration",
+      "description": "Same MCP detected again after registration (should be authorized)",
+      "event": {
+        "event_id": "evt-002-after-reg",
+        "timestamp": "2025-10-18T10:05:00Z",
+        "host_id": "testhost",
+        "detection_type": "file",
+        "score": 11,
+        "evidence": {
+          "path": "/test/path/manifest.json",
+          "hash": "manifesthash123"
+        }
+      },
+      "expected_classification": "authorized",
+      "expected_score": 5,
+      "note": "Score reduced by registry penalty (-6): 11 - 6 = 5"
+    },
+    {
+      "name": "expired_registry_entry_detection",
+      "description": "Detection matching expired registry entry (should be unauthorized)",
+      "event": {
+        "event_id": "evt-003-expired",
+        "timestamp": "2025-10-18T10:10:00Z",
+        "host_id": "testhost",
+        "detection_type": "file",
+        "score": 11,
+        "evidence": {
+          "path": "/test/path/expired-manifest.json",
+          "hash": "expiredhash789"
+        }
+      },
+      "expected_classification": "unauthorized",
+      "expected_score": 11,
+      "note": "Expired entries do not grant registry match"
+    },
+    {
+      "name": "high_score_with_registry_match",
+      "description": "High-score detection (≥9) with registry match (should still be authorized)",
+      "event": {
+        "event_id": "evt-004-high-score",
+        "timestamp": "2025-10-18T10:15:00Z",
+        "host_id": "testhost",
+        "detection_type": "process",
+        "score": 20,
+        "evidence": {
+          "process_name": "mcp-server",
+          "port": 6000,
+          "hash": "highscorehash345"
+        }
+      },
+      "expected_classification": "authorized",
+      "expected_score": 14,
+      "note": "Forced authorized despite high score: 20 - 6 = 14"
+    },
+    {
+      "name": "low_score_no_match",
+      "description": "Low-score detection without registry match (authorized by threshold)",
+      "event": {
+        "event_id": "evt-005-low-score",
+        "timestamp": "2025-10-18T10:20:00Z",
+        "host_id": "testhost-lowscore",
+        "detection_type": "file",
+        "score": 3,
+        "evidence": {
+          "path": "/test/path/low-score-manifest.json",
+          "hash": "lowscorehash999"
+        }
+      },
+      "expected_classification": "authorized",
+      "expected_score": 3,
+      "note": "Score ≤4: authorized by threshold (no registry match)"
+    },
+    {
+      "name": "suspect_detection",
+      "description": "Medium-score detection without registry match (suspect)",
+      "event": {
+        "event_id": "evt-006-suspect",
+        "timestamp": "2025-10-18T10:25:00Z",
+        "host_id": "testhost-suspect",
+        "detection_type": "network",
+        "score": 6,
+        "evidence": {
+          "port": 5000,
+          "process_name": "mcp-server-suspect"
+        }
+      },
+      "expected_classification": "suspect",
+      "expected_score": 6,
+      "note": "Score 5-8: suspect (no registry match)"
+    },
+    {
+      "name": "unauthorized_no_match",
+      "description": "High-score detection without registry match (unauthorized)",
+      "event": {
+        "event_id": "evt-007-unauthorized",
+        "timestamp": "2025-10-18T10:30:00Z",
+        "host_id": "testhost-unauthorized",
+        "detection_type": "gateway",
+        "score": 15,
+        "evidence": {
+          "port": 7000,
+          "hash": "unauthorizedhash111"
+        }
+      },
+      "expected_classification": "unauthorized",
+      "expected_score": 15,
+      "note": "Score ≥9: unauthorized (no registry match)"
+    }
+  ],
+  "registry_api_requests": [
+    {
+      "name": "register_mcp_after_initial_detection",
+      "description": "API request to register MCP in registry",
+      "method": "POST",
+      "endpoint": "/api/v1/mcps",
+      "body": {
+        "composite_id": "testhost:3000:manifesthash123:processsig456",
+        "name": "@modelcontextprotocol/server-test",
+        "vendor": "test-vendor",
+        "manifest_hash": "manifesthash123"
+      },
+      "expected_status": 201,
+      "expected_response": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "status": "approved"
+      }
+    }
+  ],
+  "notes": {
+    "scoring_thresholds": {
+      "authorized": "score ≤ 4 OR registry match",
+      "suspect": "5 ≤ score ≤ 8 (no registry match)",
+      "unauthorized": "score ≥ 9 (no registry match)"
+    },
+    "registry_penalty": -6,
+    "forced_classification": "Registry match always forces 'authorized', regardless of score"
+  }
+}
